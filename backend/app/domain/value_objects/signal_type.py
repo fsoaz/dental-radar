@@ -1,0 +1,9 @@
+from enum import StrEnum
+
+
+class SignalType(StrEnum):
+    HIRING = "HIRING"
+    ADVERTISING = "ADVERTISING"
+    WEBSITE_QUALITY = "WEBSITE_QUALITY"
+    MULTI_LOCATION = "MULTI_LOCATION"
+    HIGH_TICKET = "HIGH_TICKET"

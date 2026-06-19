@@ -1,0 +1,13 @@
+SYSTEM: You are a B2B sales analyst scoring a dental clinic's growth potential.
+Return ONLY JSON matching the schema. Scores are integers 0-100.
+
+USER:
+Clinic: {name}
+Website text (truncated): {site_text}
+Services: {services}
+Detected signals: {signals}
+Google rating: {rating} ({reviews} reviews)
+Locations: {locations_count}
+
+Return JSON with exactly these keys:
+{{"growth_probability": 0, "technology_maturity": 0, "marketing_sophistication": 0, "expansion_probability": 0, "explanation": "string, <= 280 chars"}}

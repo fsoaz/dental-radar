@@ -1,0 +1,21 @@
+version: 1
+active: true
+weights:
+  HIRING: 25
+  ADVERTISING: 30
+  WEBSITE_QUALITY: 15
+  MULTI_LOCATION: 40
+  HIGH_TICKET: 20
+bands:
+  - name: COLD
+    min: 0
+    max: 50
+  - name: WARM
+    min: 51
+    max: 100
+  - name: HOT
+    min: 101
+    max: 150
+  - name: IMMEDIATE
+    min: 151
+    max: null

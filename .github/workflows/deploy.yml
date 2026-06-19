@@ -1,0 +1,130 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: dental_radar
+          POSTGRES_PASSWORD: dental_radar
+          POSTGRES_DB: dental_radar_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dental_radar -d dental_radar_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Backend tests
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql://dental_radar:dental_radar@localhost:5432/dental_radar_test
+        run: |
+          pip install -e ".[dev]"
+          ruff check .
+          alembic upgrade head
+          pytest -v
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Frontend tests
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run lint
+          npm test
+
+  build-and-push:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set image prefix
+        run: echo "IMAGE_PREFIX=${REGISTRY}/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
+      - name: Build and push API image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}/api:main
+            ${{ env.IMAGE_PREFIX }}/api:sha-${{ github.sha }}
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: true
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1' }}
+          tags: |
+            ${{ env.IMAGE_PREFIX }}/frontend:main
+            ${{ env.IMAGE_PREFIX }}/frontend:sha-${{ github.sha }}
+
+  smoke-deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare production env
+        run: |
+          cat > .env.production <<'EOF'
+          POSTGRES_USER=dental_radar
+          POSTGRES_PASSWORD=ci-smoke-password
+          POSTGRES_DB=dental_radar
+          JWT_SECRET=ci-smoke-jwt-secret
+          NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+          CORS_ORIGINS=http://localhost:3000
+          LOG_JSON=true
+          GITHUB_REPOSITORY=local/dental-radar
+          IMAGE_TAG=smoke
+          EOF
+
+      - name: Build and start production stack
+        run: |
+          docker compose --env-file .env.production -f docker-compose.prod.yml build
+          docker compose --env-file .env.production -f docker-compose.prod.yml up -d
+
+      - name: Wait for readiness
+        run: ./scripts/wait-for-health.sh
+
+      - name: Rollback smoke test
+        run: ./scripts/rollback.sh smoke
+
+      - name: Tear down
+        if: always()
+        run: docker compose --env-file .env.production -f docker-compose.prod.yml down -v
