@@ -19,21 +19,53 @@ docker compose up --build
 ```bash
 cd frontend
 cp .env.example .env.local
-npm install
+npm ci
 npm run dev
 ```
 
 Set `NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1` in `.env.local` (default).
+
+### Frontend dependency audits
+
+This project uses Next.js 15 with React 19. Inspect an audit report before changing
+dependencies:
+
+```bash
+cd frontend
+npm audit
+```
+
+Do not run `npm audit fix --force` or bypass peer-dependency checks with
+`--legacy-peer-deps`. A forced audit fix can select an incompatible Next.js major
+version. Resolve advisories with targeted, compatible dependency upgrades, then run
+the frontend lint, test, and build commands.
+
+If an audit command unexpectedly changes `next` from 15.x to 9.x, restore the
+tracked dependency files and reinstall from the lockfile:
+
+```bash
+cd frontend
+git diff -- package.json package-lock.json
+git restore package.json package-lock.json
+npm ci
+npm audit
+npm run lint
+npm test
+npm run build
+```
 
 ## Local development (backend)
 
 ```bash
 cd backend
 pip install -e ".[dev]"
-export DATABASE_URL=postgresql://dental_radar:dental_radar@localhost:5432/dental_radar
+export DATABASE_URL=postgresql://dental_radar:dental_radar@localhost:5433/dental_radar
 alembic upgrade head
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
+
+Port `5433` targets the Postgres exposed by `docker compose up` (mapped `5433:5432`).
+If you run your own Postgres directly on the host instead, use `5432`.
 
 ## Tests
 
