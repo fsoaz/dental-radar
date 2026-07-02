@@ -1,3 +1,4 @@
+import httpx
 import pytest
 
 from app.application.dto.enrichment_dto import ClinicAIInput, EnrichmentResult, SignalSummary
@@ -68,6 +69,65 @@ def test_repair_retry_path_uses_second_response():
     completion = provider.analyze_clinic(payload)
     assert completion.result.growth_probability == 55
     assert completion.result.explanation == "Recovered after repair."
+
+
+def test_gpt_provider_uses_configured_base_url(monkeypatch):
+    captured: dict[str, object] = {}
+
+    def fake_post(url, **kwargs):
+        captured["url"] = url
+        captured["kwargs"] = kwargs
+        return httpx.Response(
+            200,
+            request=httpx.Request("POST", url),
+            json={
+                "choices": [
+                    {
+                        "message": {
+                            "content": (
+                                '{"growth_probability": 55, "technology_maturity": 44, '
+                                '"marketing_sophistication": 33, "expansion_probability": 22, '
+                                '"explanation": "OpenRouter response."}'
+                            )
+                        }
+                    }
+                ]
+            },
+        )
+
+    monkeypatch.setattr("app.infrastructure.ai.providers.base_provider.httpx.post", fake_post)
+    provider = GPTProvider(
+        api_key="test-key",
+        model="openai/gpt-4o-mini",
+        base_url="https://openrouter.ai/api/v1/",
+    )
+
+    payload = ClinicAIInput(
+        name="Smile Dental",
+        site_text="Modern dental clinic",
+        services=["implants"],
+        signals=[SignalSummary(type="HIRING", evidence="hiring page")],
+        rating=4.5,
+        reviews=100,
+        locations_count=1,
+    )
+    completion = provider.analyze_clinic(payload)
+
+    assert captured["url"] == "https://openrouter.ai/api/v1/chat/completions"
+    kwargs = captured["kwargs"]
+    assert isinstance(kwargs, dict)
+    assert kwargs["json"]["model"] == "openai/gpt-4o-mini"
+    assert completion.result.explanation == "OpenRouter response."
+
+
+def test_gpt_provider_rejects_non_https_base_url():
+    with pytest.raises(ValueError, match="https://"):
+        GPTProvider(api_key="k", model="m", base_url="http://evil.example/v1")
+
+
+def test_gpt_provider_blank_base_url_falls_back_to_openai():
+    provider = GPTProvider(api_key="k", model="m", base_url="   ")
+    assert provider._base_url == "https://api.openai.com/v1"
 
 
 def test_compute_input_fingerprint_changes_when_signals_change():

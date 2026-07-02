@@ -24,6 +24,13 @@ def test_factory_selects_provider_by_env(provider_name, expected_cls):
     assert provider.provider_name == provider_name
 
 
+def test_factory_passes_openai_base_url():
+    cfg = Settings(ai_provider="gpt", openai_base_url="https://openrouter.ai/api/v1/")
+    provider = create_llm_provider(app_settings=cfg)
+    assert isinstance(provider, GPTProvider)
+    assert provider._base_url == "https://openrouter.ai/api/v1"
+
+
 def test_factory_rejects_unknown_provider():
     cfg = Settings(ai_provider="unknown")
     with pytest.raises(ValueError, match="Unsupported AI provider"):

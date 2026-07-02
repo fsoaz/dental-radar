@@ -85,7 +85,10 @@ through the `ScoringConfig` entity (versioned — scores record the `config_vers
 `infrastructure/ai/factory.py` selects a provider (`gpt` / `claude` / `gemini`) from
 `AI_PROVIDER`, with retries (exponential backoff on `TransientLLMError`) and an optional
 `AI_FALLBACK_PROVIDER`. Enrichment is idempotent: an input fingerprint skips unchanged clinics
-unless `--force`. Prompts are versioned text files under `ai/prompts/`.
+unless `--force`. Prompts are versioned text files under `ai/prompts/`. `GPTProvider` honors
+`OPENAI_BASE_URL` (default `https://api.openai.com/v1`) for OpenAI-compatible endpoints like
+OpenRouter; it must be `https://` (the API key is sent there as a bearer token) and a blank
+value falls back to the OpenAI default.
 
 ### Frontend (`frontend/`)
 Next.js 15 App Router + React 19, Tailwind, shadcn/ui (`components/ui/`). All backend access

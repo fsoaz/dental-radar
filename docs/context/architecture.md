@@ -351,6 +351,8 @@ class LLMProvider(Protocol):
 ```
 Implementations: `GPTProvider` (default), `ClaudeProvider`, `GeminiProvider`. A factory reads `AI_PROVIDER` env (`gpt|claude|gemini`) and returns the impl. All return the **same** `EnrichmentResult` schema, so use cases are provider-agnostic.
 
+`GPTProvider` accepts an `OPENAI_BASE_URL` (default `https://api.openai.com/v1`) so it can target any OpenAI-compatible endpoint (e.g. OpenRouter). The base URL must be `https://` — the API key is sent as a bearer token to that host, so plaintext `http://` is rejected at construction. A blank value falls back to the OpenAI default.
+
 ```mermaid
 flowchart TB
   UC[EnrichClinic use case] --> F{provider factory<br/>AI_PROVIDER}

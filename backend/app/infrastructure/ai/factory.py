@@ -28,6 +28,7 @@ def create_llm_provider(
         return GPTProvider(
             api_key=cfg.openai_api_key,
             model=cfg.openai_model,
+            base_url=cfg.openai_base_url,
             **common,
         )
     if name == "claude":

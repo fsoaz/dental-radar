@@ -65,10 +65,41 @@ class BaseLLMProvider(ABC, LLMProvider):
             raise TransientLLMError(
                 f"{self.provider_name} transient error {response.status_code}: {response.text}"
             )
-        response.raise_for_status()
+        if response.is_error:
+            message = f"{self.provider_name} error {response.status_code}: {response.text}"
+            try:
+                request = response.request
+            except RuntimeError:
+                request = httpx.Request("POST", str(response.url))
+            raise httpx.HTTPStatusError(message, request=request, response=response)
 
 
 class GPTProvider(BaseLLMProvider):
+    def __init__(
+        self,
+        *,
+        api_key: str,
+        model: str,
+        base_url: str = "https://api.openai.com/v1",
+        max_site_text_chars: int = 8000,
+        timeout_seconds: float = 60.0,
+    ) -> None:
+        super().__init__(
+            api_key=api_key,
+            model=model,
+            max_site_text_chars=max_site_text_chars,
+            timeout_seconds=timeout_seconds,
+        )
+        normalized = (base_url or "").strip().rstrip("/")
+        if not normalized:
+            normalized = "https://api.openai.com/v1"
+        if not normalized.startswith("https://"):
+            raise ValueError(
+                f"OPENAI_BASE_URL must use https:// (got {base_url!r}); "
+                "the API key is sent as a bearer token to this host"
+            )
+        self._base_url = normalized
+
     @property
     def provider_name(self) -> str:
         return "gpt"
@@ -78,7 +109,7 @@ class GPTProvider(BaseLLMProvider):
             raise TransientLLMError("OPENAI_API_KEY is not configured")
 
         response = httpx.post(
-            "https://api.openai.com/v1/chat/completions",
+            f"{self._base_url}/chat/completions",
             headers={
                 "Authorization": f"Bearer {self._api_key}",
                 "Content-Type": "application/json",
