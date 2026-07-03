@@ -2,12 +2,14 @@ import argparse
 import sys
 from uuid import UUID
 
+from app.application.dto.enrichment_dto import ClinicAIInput, SignalSummary
 from app.application.use_cases.compute_score import ComputeScore, RescoreAll
 from app.application.use_cases.detect_all_signals import DetectAllSignals
 from app.application.use_cases.detect_signals import DetectSignals
 from app.application.use_cases.discover_clinics import DiscoverClinics
 from app.application.use_cases.enrich_clinic import EnrichAllClinics, EnrichClinic
 from app.domain.services.signal_detection_service import SignalDetectionService
+from app.infrastructure.ai.factory import create_llm_provider
 from app.infrastructure.config.settings import settings
 from app.infrastructure.crawler.website_crawler import HttpxWebsiteCrawler
 from app.infrastructure.db.session import SessionLocal
@@ -144,6 +146,52 @@ def run_enrich(clinic_id: UUID | None, enrich_all: bool, force: bool) -> int:
         session.close()
 
 
+def run_test_connection() -> int:
+    print("=== Dental Radar LLM Connection Test ===")
+    print(f"Configured provider: {settings.ai_provider}")
+
+    try:
+        print("\nInitializing LLM provider...")
+        provider = create_llm_provider()
+        print(f"Provider: {provider.provider_name}")
+        print(f"Model: {provider.model_name}")
+
+        payload = ClinicAIInput(
+            name="Test Dental Clinic",
+            site_text=(
+                "Welcome to Test Dental Clinic. We offer advanced orthodontics, implants, "
+                "and digital teeth whitening. We use state of the art laser scanners."
+            ),
+            services=["Orthodontics", "Implants", "Whitening"],
+            signals=[
+                SignalSummary(type="booking_system", evidence="Online appointment form found"),
+                SignalSummary(type="active_socials", evidence="Instagram link found"),
+            ],
+            rating=4.8,
+            reviews=124,
+            locations_count=2,
+        )
+
+        print("Sending request to LLM...")
+        completion = provider.analyze_clinic(payload)
+    except Exception as exc:
+        print("\n=== Connection Failed! ===", file=sys.stderr)
+        print(f"Error details: {exc}", file=sys.stderr)
+        return 1
+
+    print("\n=== Success! ===")
+    print(f"Provider used: {completion.provider}")
+    print(f"Model used: {completion.model}")
+    print(f"Prompt version: {completion.prompt_version}")
+    print("\nEnriched results:")
+    print(f" - Growth Probability: {completion.result.growth_probability}%")
+    print(f" - Technology Maturity: {completion.result.technology_maturity}%")
+    print(f" - Marketing Sophistication: {completion.result.marketing_sophistication}%")
+    print(f" - Expansion Probability: {completion.result.expansion_probability}%")
+    print(f" - Explanation: {completion.result.explanation}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="dental-radar")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -178,6 +226,8 @@ def main(argv: list[str] | None = None) -> int:
         help="Re-enrich even when inputs are unchanged",
     )
 
+    subparsers.add_parser("test-connection", help="Test the configured LLM provider")
+
     args = parser.parse_args(argv)
 
     if args.command == "discover":
@@ -188,6 +238,8 @@ def main(argv: list[str] | None = None) -> int:
         return run_score(args.clinic_id, args.all)
     if args.command == "enrich":
         return run_enrich(args.clinic_id, args.all, args.force)
+    if args.command == "test-connection":
+        return run_test_connection()
 
     parser.print_help()
     return 1

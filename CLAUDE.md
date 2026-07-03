@@ -30,6 +30,12 @@ pytest tests/unit/test_scoring_service.py         # single file
 pytest -k "priority"                              # single test by name
 ```
 Use host port `5433` against the Docker Postgres (`5433:5432`); `5432` for a native host Postgres.
+For the full suite against compose Postgres, create `dental_radar_test` once and run:
+```bash
+docker compose up -d postgres
+docker compose exec postgres createdb -U dental_radar dental_radar_test
+DATABASE_URL=postgresql://dental_radar:dental_radar@localhost:5433/dental_radar_test pytest
+```
 
 ### Frontend
 ```bash
@@ -47,6 +53,7 @@ python cli.py discover --query "dentist in Lisbon"   # ingest clinics from Googl
 python cli.py detect  --clinic-id <uuid> | --all     # crawl sites, detect buying signals
 python cli.py enrich  --clinic-id <uuid> | --all [--force]   # LLM enrichment (force = re-run unchanged)
 python cli.py score   --clinic-id <uuid> | --all     # recompute scores + priority
+python cli.py test-connection                        # validate configured LLM provider
 ```
 
 ## Architecture
@@ -87,8 +94,8 @@ through the `ScoringConfig` entity (versioned — scores record the `config_vers
 `AI_FALLBACK_PROVIDER`. Enrichment is idempotent: an input fingerprint skips unchanged clinics
 unless `--force`. Prompts are versioned text files under `ai/prompts/`. `GPTProvider` honors
 `OPENAI_BASE_URL` (default `https://api.openai.com/v1`) for OpenAI-compatible endpoints like
-OpenRouter; it must be `https://` (the API key is sent there as a bearer token) and a blank
-value falls back to the OpenAI default.
+OpenRouter. Settings normalize trailing slashes, reject non-HTTPS URLs at config load (the API
+key is sent there as a bearer token), and let a blank value fall back to the OpenAI default.
 
 ### Frontend (`frontend/`)
 Next.js 15 App Router + React 19, Tailwind, shadcn/ui (`components/ui/`). All backend access

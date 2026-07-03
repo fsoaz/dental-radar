@@ -8,7 +8,8 @@ from app.infrastructure.ai.enrichment_parser import (
     parse_enrichment_response,
     truncate_site_text,
 )
-from app.infrastructure.ai.providers.base_provider import GPTProvider
+from app.infrastructure.ai.providers.base_provider import GPTProvider, TransientLLMError
+from app.infrastructure.config.settings import DEFAULT_OPENAI_BASE_URL
 
 
 def test_parse_enrichment_response_clamps_scores():
@@ -120,14 +121,33 @@ def test_gpt_provider_uses_configured_base_url(monkeypatch):
     assert completion.result.explanation == "OpenRouter response."
 
 
-def test_gpt_provider_rejects_non_https_base_url():
-    with pytest.raises(ValueError, match="https://"):
-        GPTProvider(api_key="k", model="m", base_url="http://evil.example/v1")
-
-
 def test_gpt_provider_blank_base_url_falls_back_to_openai():
     provider = GPTProvider(api_key="k", model="m", base_url="   ")
-    assert provider._base_url == "https://api.openai.com/v1"
+    assert provider._base_url == DEFAULT_OPENAI_BASE_URL
+
+
+def test_provider_raises_http_error_for_redirect_response():
+    provider = GPTProvider(api_key="k", model="m")
+    response = httpx.Response(
+        302,
+        request=httpx.Request("POST", "https://api.openai.com/v1/chat/completions"),
+        text="Redirecting",
+    )
+
+    with pytest.raises(httpx.HTTPStatusError, match="gpt error 302"):
+        provider._raise_for_status(response)
+
+
+def test_provider_raises_transient_error_for_retryable_status():
+    provider = GPTProvider(api_key="k", model="m")
+    response = httpx.Response(
+        429,
+        request=httpx.Request("POST", "https://api.openai.com/v1/chat/completions"),
+        text="Rate limited",
+    )
+
+    with pytest.raises(TransientLLMError, match="gpt transient error 429"):
+        provider._raise_for_status(response)
 
 
 def test_compute_input_fingerprint_changes_when_signals_change():

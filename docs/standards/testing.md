@@ -2,7 +2,7 @@
 
 Pragmatic MVP testing — cover the logic that matters (scoring, signal rules, ingestion), mock the expensive externals.
 
-**Current counts:** 56 backend tests, 6 frontend tests (2026-06-19).
+**Current counts:** 66 backend tests, 6 frontend tests (2026-07-03).
 
 ## Backend (pytest)
 
@@ -32,6 +32,7 @@ Layered, matching Clean Architecture:
 ## Fixtures
 - `pytest` fixtures: test DB session (rolled back per test), seeded `scoring_config` v1, sample clinics, sample HTML.
 - Test DB URL: `postgresql://dental_radar:dental_radar@localhost:5433/dental_radar_test` (compose port 5433).
+- Create the test DB once with `docker compose exec postgres createdb -U dental_radar dental_radar_test`.
 
 ## Frontend
 - **Unit/component:** Vitest + React Testing Library — `ClinicTable`, `FilterBar`, score/AI breakdown.

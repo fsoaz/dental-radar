@@ -6,7 +6,7 @@
 
 | Suite | Command | Result |
 |-------|---------|--------|
-| Backend | `cd backend && pytest -v` | **56 passed** |
+| Backend | `cd backend && DATABASE_URL=postgresql://dental_radar:dental_radar@localhost:5433/dental_radar_test pytest -q` | **66 passed** |
 | Frontend | `cd frontend && npm test` | **6 passed** |
 | Production smoke | `./scripts/deploy.sh` + `./scripts/rollback.sh` | Health green |
 
@@ -23,6 +23,18 @@
 ```
 
 ---
+
+### LLM provider/config hardening — 2026-07-03
+- Story: HTTP status handling / OpenAI base URL validation / LLM diagnostic CLI — PASS
+- Evidence:
+  ```bash
+  cd backend
+  ruff check .
+  ruff format --check .
+  DATABASE_URL=postgresql://dental_radar:dental_radar@localhost:5433/dental_radar_test pytest -q
+  # 66 passed
+  ```
+- Coverage: non-2xx LLM HTTP failures including redirects, transient retry statuses, settings-level OpenAI base URL validation, `dental-radar test-connection` success/failure exit codes.
 
 ### Security review hardening — 2026-06-19
 - Story: SSRF guard / Gemini key / discover cap — PASS

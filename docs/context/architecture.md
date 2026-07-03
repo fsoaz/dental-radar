@@ -351,7 +351,7 @@ class LLMProvider(Protocol):
 ```
 Implementations: `GPTProvider` (default), `ClaudeProvider`, `GeminiProvider`. A factory reads `AI_PROVIDER` env (`gpt|claude|gemini`) and returns the impl. All return the **same** `EnrichmentResult` schema, so use cases are provider-agnostic.
 
-`GPTProvider` accepts an `OPENAI_BASE_URL` (default `https://api.openai.com/v1`) so it can target any OpenAI-compatible endpoint (e.g. OpenRouter). The base URL must be `https://` — the API key is sent as a bearer token to that host, so plaintext `http://` is rejected at construction. A blank value falls back to the OpenAI default.
+`GPTProvider` accepts an `OPENAI_BASE_URL` (default `https://api.openai.com/v1`) so it can target any OpenAI-compatible endpoint (e.g. OpenRouter). Settings normalize trailing slashes, reject plaintext `http://` at config load, and preserve the documented blank-value fallback to the OpenAI default. Provider constructors stay infallible so fallback providers are not masked by configuration validation.
 
 ```mermaid
 flowchart TB

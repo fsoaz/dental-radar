@@ -74,12 +74,20 @@ If you run your own Postgres directly on the host instead, use `5432`.
 cd backend
 ruff check .
 ruff format --check .
-pytest
+DATABASE_URL=postgresql://dental_radar:dental_radar@localhost:5433/dental_radar_test pytest
 
 # Frontend
 cd frontend
 npm run lint
 npm test
+```
+
+Backend integration/API tests need a Postgres test database. With Docker Compose, start
+Postgres and create the test DB once:
+
+```bash
+docker compose up -d postgres
+docker compose exec postgres createdb -U dental_radar dental_radar_test
 ```
 
 ## CLI
@@ -94,9 +102,11 @@ python cli.py score --all
 python cli.py enrich --clinic-id <uuid>
 python cli.py enrich --all
 python cli.py enrich --clinic-id <uuid> --force
+python cli.py test-connection
 ```
 
-Requires `GOOGLE_PLACES_API_KEY` in `.env`.
+Requires `GOOGLE_PLACES_API_KEY` for discovery and an LLM API key for enrichment /
+`test-connection`.
 
 ## Production deployment
 

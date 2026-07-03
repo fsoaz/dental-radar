@@ -30,6 +30,8 @@ Governs the AI enrichment layer. Design in [architecture.md → AI design](../co
 ## Reliability
 - Retry transient errors (timeout/5xx/429) with exponential backoff, max 3.
 - Optional fallback: if primary provider fails after retries, fall back to a secondary provider (configurable). Record which provider actually produced the result.
+- Treat any non-2xx LLM HTTP response as a labeled provider HTTP failure; 3xx redirects must not fall through to JSON parsing.
+- Validate OpenAI-compatible base URLs in settings, not provider constructors. `OPENAI_BASE_URL` must be HTTPS; blank values fall back to the OpenAI default.
 
 ## Data handling / PII
 - Only send public clinic data (site text, services, ratings). No private/scraped personal data beyond what's publicly on the clinic site.

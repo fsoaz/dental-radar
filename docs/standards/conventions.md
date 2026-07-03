@@ -46,7 +46,11 @@ Applies to backend (Python) and frontend (TypeScript). Keep it simple — MVP ov
 - `AI_PROVIDER`, `OPENAI_API_KEY` (+ `ANTHROPIC_API_KEY`/`GEMINI_API_KEY` if used)
 - `NEXT_PUBLIC_API_URL` (frontend → API)
 - `CORS_ORIGINS` (API → frontend origin)
+- `OPENAI_BASE_URL` (optional OpenAI-compatible HTTPS endpoint; blank falls back to OpenAI)
 
 **Local stacks:**
 - Dev: `docker compose up` (Postgres on host port **5433**)
 - Prod: `docker compose -f docker-compose.prod.yml up -d` after configuring `.env.production`
+
+`CORS_ORIGINS` defaults narrowly in Python settings. Keep broad localhost/0.0.0.0 origin lists
+in dev-only templates/compose files; production must set only trusted public frontend origins.

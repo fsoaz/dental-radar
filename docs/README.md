@@ -37,6 +37,7 @@ cd backend
 python cli.py discover --query "dentist in Lisbon"
 python cli.py detect --all
 python cli.py score --all
+python cli.py test-connection
 python cli.py enrich --all
 
 # Open dashboard → filter Hot/Immediate → open clinic detail
@@ -93,10 +94,11 @@ python cli.py enrich --all
 
 | Suite | Count |
 |-------|-------|
-| Backend (`pytest`) | 56 |
+| Backend (`pytest`) | 66 |
 | Frontend (`vitest`) | 6 |
 
 Postgres test DB host port: **5433** (compose maps `5433:5432` to avoid local conflicts).
+Create `dental_radar_test` before running backend integration/API tests locally.
 
 ## Not yet implemented (post-MVP)
 

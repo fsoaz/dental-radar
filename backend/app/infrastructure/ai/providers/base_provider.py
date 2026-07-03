@@ -11,6 +11,7 @@ from app.infrastructure.ai.enrichment_parser import (
     build_user_prompt,
     parse_enrichment_response,
 )
+from app.infrastructure.config.settings import DEFAULT_OPENAI_BASE_URL
 
 
 class TransientLLMError(Exception):
@@ -65,13 +66,12 @@ class BaseLLMProvider(ABC, LLMProvider):
             raise TransientLLMError(
                 f"{self.provider_name} transient error {response.status_code}: {response.text}"
             )
-        if response.is_error:
-            message = f"{self.provider_name} error {response.status_code}: {response.text}"
-            try:
-                request = response.request
-            except RuntimeError:
-                request = httpx.Request("POST", str(response.url))
-            raise httpx.HTTPStatusError(message, request=request, response=response)
+        if not response.is_success:
+            message = (
+                f"{self.provider_name} error {response.status_code} for {response.url}: "
+                f"{response.text}"
+            )
+            raise httpx.HTTPStatusError(message, request=response.request, response=response)
 
 
 class GPTProvider(BaseLLMProvider):
@@ -80,7 +80,7 @@ class GPTProvider(BaseLLMProvider):
         *,
         api_key: str,
         model: str,
-        base_url: str = "https://api.openai.com/v1",
+        base_url: str = DEFAULT_OPENAI_BASE_URL,
         max_site_text_chars: int = 8000,
         timeout_seconds: float = 60.0,
     ) -> None:
@@ -90,15 +90,7 @@ class GPTProvider(BaseLLMProvider):
             max_site_text_chars=max_site_text_chars,
             timeout_seconds=timeout_seconds,
         )
-        normalized = (base_url or "").strip().rstrip("/")
-        if not normalized:
-            normalized = "https://api.openai.com/v1"
-        if not normalized.startswith("https://"):
-            raise ValueError(
-                f"OPENAI_BASE_URL must use https:// (got {base_url!r}); "
-                "the API key is sent as a bearer token to this host"
-            )
-        self._base_url = normalized
+        self._base_url = (base_url or "").strip().rstrip("/") or DEFAULT_OPENAI_BASE_URL
 
     @property
     def provider_name(self) -> str:

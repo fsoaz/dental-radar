@@ -1,4 +1,5 @@
 import pytest
+from pydantic import ValidationError
 
 from app.infrastructure.ai.factory import create_llm_provider
 from app.infrastructure.ai.providers.base_provider import (
@@ -6,7 +7,7 @@ from app.infrastructure.ai.providers.base_provider import (
     GeminiProvider,
     GPTProvider,
 )
-from app.infrastructure.config.settings import Settings
+from app.infrastructure.config.settings import DEFAULT_OPENAI_BASE_URL, Settings
 
 
 @pytest.mark.parametrize(
@@ -29,6 +30,21 @@ def test_factory_passes_openai_base_url():
     provider = create_llm_provider(app_settings=cfg)
     assert isinstance(provider, GPTProvider)
     assert provider._base_url == "https://openrouter.ai/api/v1"
+
+
+def test_settings_blank_openai_base_url_falls_back_to_default():
+    cfg = Settings(openai_base_url="   ")
+    assert cfg.openai_base_url == DEFAULT_OPENAI_BASE_URL
+
+
+def test_settings_accepts_case_insensitive_https_scheme():
+    cfg = Settings(openai_base_url="HTTPS://openrouter.ai/api/v1/")
+    assert cfg.openai_base_url == "HTTPS://openrouter.ai/api/v1"
+
+
+def test_settings_rejects_non_https_openai_base_url():
+    with pytest.raises(ValidationError, match="OPENAI_BASE_URL must use https://"):
+        Settings(openai_base_url="http://internal-proxy/v1")
 
 
 def test_factory_rejects_unknown_provider():

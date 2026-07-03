@@ -13,6 +13,12 @@
 
 ---
 
+### 2026-07-03 — LLM provider/config hardening
+- Phase/Sprint: Hardening / post-S7
+- Done: Restored non-2xx LLM HTTP failures, moved OpenAI base URL validation into settings, narrowed Python CORS defaults, replaced the standalone LLM script with `dental-radar test-connection`, and added focused tests. Backend suite now reports 66 passing tests.
+- Decisions: Keep broad localhost CORS origins only in dev-scoped env/compose templates; keep provider constructors infallible so fallback providers are not masked by config validation.
+- Next: Pilot with real data; run `python cli.py test-connection` before batch enrichment.
+
 ### 2026-06-19 — Security review fixes
 - Phase/Sprint: Hardening / post-S7
 - Done: Applied 3 fixes from security review — SSRF guard in `HttpxWebsiteCrawler` (scheme + private/metadata IP denylist, manual per-hop redirect validation), Gemini API key moved from query string to `x-goog-api-key` header, Google Places discovery capped via new `PLACES_MAX_PAGES` setting (default 3). Added `tests/unit/test_website_crawler.py` (5 tests); updated `.env(.production).example`, architecture §8, api_rules, review_notes.
