@@ -71,7 +71,11 @@ class BaseLLMProvider(ABC, LLMProvider):
                 f"{self.provider_name} error {response.status_code} for {response.url}: "
                 f"{response.text}"
             )
-            raise httpx.HTTPStatusError(message, request=response.request, response=response)
+            try:
+                request = response.request
+            except RuntimeError:
+                request = httpx.Request("POST", str(response.url))
+            raise httpx.HTTPStatusError(message, request=request, response=response)
 
 
 class GPTProvider(BaseLLMProvider):

@@ -1,6 +1,6 @@
 from urllib.parse import urlparse
 
-from pydantic import field_validator
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
@@ -31,18 +31,23 @@ class Settings(BaseSettings):
     log_json: bool = True
     app_env: str = "development"
 
-    @field_validator("openai_base_url")
-    @classmethod
-    def validate_openai_base_url(cls, value: str) -> str:
-        normalized = (value or "").strip().rstrip("/")
+    @model_validator(mode="after")
+    def _normalize_openai_base_url(self) -> "Settings":
+        normalized = (self.openai_base_url or "").strip().rstrip("/")
         if not normalized:
-            return DEFAULT_OPENAI_BASE_URL
-        if urlparse(normalized).scheme != "https":
+            self.openai_base_url = DEFAULT_OPENAI_BASE_URL
+            return self
+        uses_gpt = "gpt" in {
+            self.ai_provider.lower().strip(),
+            self.ai_fallback_provider.lower().strip(),
+        }
+        if uses_gpt and urlparse(normalized).scheme != "https":
             raise ValueError(
-                f"OPENAI_BASE_URL must use https:// (got {value!r}); "
+                f"OPENAI_BASE_URL must use https:// (got {self.openai_base_url!r}); "
                 "the API key is sent as a bearer token to this host"
             )
-        return normalized
+        self.openai_base_url = normalized
+        return self
 
 
 settings = Settings()

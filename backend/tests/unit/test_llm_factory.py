@@ -44,7 +44,25 @@ def test_settings_accepts_case_insensitive_https_scheme():
 
 def test_settings_rejects_non_https_openai_base_url():
     with pytest.raises(ValidationError, match="OPENAI_BASE_URL must use https://"):
-        Settings(openai_base_url="http://internal-proxy/v1")
+        Settings(ai_provider="gpt", openai_base_url="http://internal-proxy/v1")
+
+
+def test_settings_tolerates_non_https_openai_base_url_when_gpt_unused():
+    cfg = Settings(
+        ai_provider="claude",
+        ai_fallback_provider="gemini",
+        openai_base_url="http://internal-proxy/v1",
+    )
+    assert cfg.openai_base_url == "http://internal-proxy/v1"
+
+
+def test_settings_rejects_non_https_openai_base_url_when_used_as_fallback():
+    with pytest.raises(ValidationError, match="OPENAI_BASE_URL must use https://"):
+        Settings(
+            ai_provider="claude",
+            ai_fallback_provider="gpt",
+            openai_base_url="http://internal-proxy/v1",
+        )
 
 
 def test_factory_rejects_unknown_provider():
