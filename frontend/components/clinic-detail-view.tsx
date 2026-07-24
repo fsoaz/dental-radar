@@ -16,6 +16,16 @@ interface ClinicDetailViewProps {
   clinicId: string;
 }
 
+function safeWebsiteHref(website: string | null): string | null {
+  if (!website) return null;
+  try {
+    const url = new URL(website);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
 export function ClinicDetailView({ clinicId }: ClinicDetailViewProps) {
   const [clinic, setClinic] = useState<ClinicDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -75,6 +85,8 @@ export function ClinicDetailView({ clinicId }: ClinicDetailViewProps) {
     .filter(Boolean)
     .join(", ");
 
+  const websiteHref = safeWebsiteHref(clinic.website);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -84,9 +96,9 @@ export function ClinicDetailView({ clinicId }: ClinicDetailViewProps) {
             Back to list
           </Link>
         </Button>
-        {clinic.website ? (
+        {websiteHref ? (
           <Button asChild variant="secondary">
-            <a href={clinic.website} target="_blank" rel="noreferrer">
+            <a href={websiteHref} target="_blank" rel="noreferrer">
               Visit website
               <ExternalLink className="h-4 w-4" />
             </a>
@@ -126,12 +138,6 @@ export function ClinicDetailView({ clinicId }: ClinicDetailViewProps) {
             <p>
               <span className="font-medium">Locations:</span> {clinic.locations_count}
             </p>
-            {clinic.services.length > 0 ? (
-              <div>
-                <p className="font-medium">Services</p>
-                <p className="mt-1 text-muted-foreground">{clinic.services.join(", ")}</p>
-              </div>
-            ) : null}
           </CardContent>
         </Card>
 

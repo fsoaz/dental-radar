@@ -13,7 +13,6 @@ class Clinic:
     google_rating: float | None = None
     google_review_count: int = 0
     locations_count: int = 1
-    services: list[str] = field(default_factory=list)
     social_urls: list[str] = field(default_factory=list)
     created_at: datetime | None = None
     updated_at: datetime | None = None

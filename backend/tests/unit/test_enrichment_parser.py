@@ -61,7 +61,6 @@ def test_repair_retry_path_uses_second_response():
     payload = ClinicAIInput(
         name="Smile Dental",
         site_text="Modern dental clinic",
-        services=["implants"],
         signals=[SignalSummary(type="HIRING", evidence="hiring page")],
         rating=4.5,
         reviews=100,
@@ -106,7 +105,6 @@ def test_gpt_provider_uses_configured_base_url(monkeypatch):
     payload = ClinicAIInput(
         name="Smile Dental",
         site_text="Modern dental clinic",
-        services=["implants"],
         signals=[SignalSummary(type="HIRING", evidence="hiring page")],
         rating=4.5,
         reviews=100,
@@ -154,7 +152,6 @@ def test_compute_input_fingerprint_changes_when_signals_change():
     base = ClinicAIInput(
         name="Smile Dental",
         site_text="site",
-        services=["implants"],
         signals=[SignalSummary(type="HIRING", evidence="jobs")],
         rating=4.5,
         reviews=10,
@@ -163,7 +160,6 @@ def test_compute_input_fingerprint_changes_when_signals_change():
     changed = ClinicAIInput(
         name="Smile Dental",
         site_text="site",
-        services=["implants"],
         signals=[SignalSummary(type="ADVERTISING", evidence="ads")],
         rating=4.5,
         reviews=10,

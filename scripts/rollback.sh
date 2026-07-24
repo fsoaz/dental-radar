@@ -23,6 +23,12 @@ if [ -f "$ENV_FILE" ]; then
   set +a
 fi
 
+# GHCR/Docker require lowercase repository names; must match the lowercased
+# path .github/workflows/deploy.yml pushes to.
+if [ -n "${GITHUB_REPOSITORY:-}" ]; then
+  export GITHUB_REPOSITORY="${GITHUB_REPOSITORY,,}"
+fi
+
 echo "Rolling back to tag=${IMAGE_TAG}..."
 docker compose "${compose_args[@]}" pull api frontend || true
 docker compose "${compose_args[@]}" up -d

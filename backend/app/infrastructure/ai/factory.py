@@ -53,6 +53,9 @@ def analyze_clinic_with_retries(
     *,
     max_retries: int = 3,
 ) -> LLMCompletion:
+    if max_retries < 1:
+        raise ValueError("max_retries must be >= 1")
+
     last_error: Exception | None = None
     for attempt in range(max_retries):
         try:

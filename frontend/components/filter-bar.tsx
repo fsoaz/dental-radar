@@ -140,6 +140,8 @@ export function FilterBar({ onChange }: FilterBarProps) {
 
       <Input
         aria-label="Minimum score"
+        type="number"
+        min={0}
         inputMode="numeric"
         placeholder="Min score"
         value={draft.min_score}
@@ -148,6 +150,8 @@ export function FilterBar({ onChange }: FilterBarProps) {
 
       <Input
         aria-label="Maximum score"
+        type="number"
+        min={0}
         inputMode="numeric"
         placeholder="Max score"
         value={draft.max_score}

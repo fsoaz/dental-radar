@@ -24,11 +24,20 @@ services:
       DATABASE_URL: postgresql://dental_radar:dental_radar@postgres:5432/dental_radar
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
       GOOGLE_PLACES_API_KEY: ${GOOGLE_PLACES_API_KEY:-}
+      PLACES_MAX_PAGES: ${PLACES_MAX_PAGES:-3}
       AI_PROVIDER: ${AI_PROVIDER:-gpt}
+      AI_FALLBACK_PROVIDER: ${AI_FALLBACK_PROVIDER:-}
+      AI_RETRY_MAX: ${AI_RETRY_MAX:-3}
+      AI_MAX_SITE_TEXT_CHARS: ${AI_MAX_SITE_TEXT_CHARS:-8000}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-6}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.0-flash}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000,http://0.0.0.0:3000,http://localhost:3001,http://127.0.0.1:3001,http://0.0.0.0:3001}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
       LOG_JSON: ${LOG_JSON:-false}
       APP_ENV: development
     depends_on:

@@ -232,7 +232,6 @@ def get_clinic(
         google_rating=detail.clinic.google_rating,
         google_review_count=detail.clinic.google_review_count,
         locations_count=detail.clinic.locations_count,
-        services=detail.clinic.services,
         social_urls=detail.clinic.social_urls,
         signals=[SignalResponse(**signal) for signal in detail.signals],
         score=score,

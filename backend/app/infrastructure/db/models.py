@@ -30,7 +30,6 @@ class ClinicModel(Base):
     google_rating: Mapped[float | None] = mapped_column(Numeric(2, 1))
     google_review_count: Mapped[int] = mapped_column(Integer, default=0)
     locations_count: Mapped[int] = mapped_column(Integer, default=1)
-    services: Mapped[list] = mapped_column(JSONB, default=list)
     social_urls: Mapped[list] = mapped_column(JSONB, default=list)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

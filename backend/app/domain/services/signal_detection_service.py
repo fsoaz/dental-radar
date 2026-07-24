@@ -67,8 +67,8 @@ MULTI_LOCATION_MARKERS = (
 
 
 class SignalDetectionService:
-    def detect(self, evidence: PageEvidence) -> list[DetectedSignal]:
-        haystack = " ".join(
+    def _build_haystack(self, evidence: PageEvidence) -> str:
+        return " ".join(
             [
                 evidence.text,
                 evidence.html,
@@ -76,6 +76,18 @@ class SignalDetectionService:
                 " ".join(evidence.links),
             ]
         ).lower()
+
+    def estimate_locations_count(self, evidence: PageEvidence) -> int:
+        """Best-guess location count from current evidence, always computed fresh.
+
+        Unlike the MULTI_LOCATION signal (only emitted when evidence clears a
+        confidence threshold), this always reflects the latest crawl so a
+        clinic's stored count can go back down after it drops below that bar.
+        """
+        return self._estimate_locations_count(self._build_haystack(evidence), evidence)
+
+    def detect(self, evidence: PageEvidence) -> list[DetectedSignal]:
+        haystack = self._build_haystack(evidence)
 
         detected: list[DetectedSignal] = []
 
@@ -130,9 +142,7 @@ class SignalDetectionService:
             )
         return None
 
-    def _detect_multi_location(
-        self, haystack: str, evidence: PageEvidence
-    ) -> DetectedSignal | None:
+    def _estimate_locations_count(self, haystack: str, evidence: PageEvidence) -> int:
         branch_links = [
             link
             for link in evidence.links
@@ -141,12 +151,17 @@ class SignalDetectionService:
         marker_hits = sum(1 for marker in MULTI_LOCATION_MARKERS if marker in haystack)
         address_count = len(re.findall(r"\b\d{5}(?:-\d{4})?\b", evidence.text))
 
-        locations_count = max(
+        return max(
             1,
             len(branch_links) if len(branch_links) >= 2 else 0,
             marker_hits + 1 if marker_hits >= 2 else 0,
             2 if address_count >= 2 else 0,
         )
+
+    def _detect_multi_location(
+        self, haystack: str, evidence: PageEvidence
+    ) -> DetectedSignal | None:
+        locations_count = self._estimate_locations_count(haystack, evidence)
 
         if locations_count >= 2:
             return DetectedSignal(

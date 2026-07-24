@@ -2,7 +2,7 @@ import ipaddress
 import re
 import socket
 from html.parser import HTMLParser
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, urlunparse
 
 import httpx
 
@@ -34,10 +34,11 @@ def _is_blocked_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
     )
 
 
-def assert_public_url(url: str) -> None:
-    """Reject non-http(s) schemes and hosts that resolve to private/link-local ranges.
+def _resolve_public_address(url: str) -> tuple[str, str, int | None]:
+    """Resolve host to a validated public IP, returning (ip, host, explicit_port).
 
-    Defends against SSRF (e.g. cloud metadata at 169.254.169.254, internal services).
+    Raises UnsafeUrlError for disallowed schemes or hosts resolving to
+    private/link-local/etc ranges (e.g. cloud metadata at 169.254.169.254).
     """
     parsed = urlparse(url)
     if parsed.scheme not in ALLOWED_SCHEMES:
@@ -52,10 +53,32 @@ def assert_public_url(url: str) -> None:
     except socket.gaierror as exc:
         raise UnsafeUrlError(url, f"DNS resolution failed: {exc}") from exc
 
+    if not resolved:
+        raise UnsafeUrlError(url, "DNS resolution returned no addresses")
+
     for family, _type, _proto, _canon, sockaddr in resolved:
         ip = ipaddress.ip_address(sockaddr[0])
         if _is_blocked_ip(ip):
             raise UnsafeUrlError(url, f"host resolves to non-public address {ip}")
+
+    return resolved[0][4][0], host, parsed.port
+
+
+def assert_public_url(url: str) -> None:
+    """Reject non-http(s) schemes and hosts that resolve to private/link-local ranges.
+
+    Defends against SSRF (e.g. cloud metadata at 169.254.169.254, internal services).
+    """
+    _resolve_public_address(url)
+
+
+def _pin_request_url(url: str, ip: str, port: int | None) -> str:
+    """Rewrite url's host to the already-validated ip, preserving path/query/port."""
+    parsed = urlparse(url)
+    netloc = f"[{ip}]" if ":" in ip else ip
+    if port:
+        netloc = f"{netloc}:{port}"
+    return urlunparse(parsed._replace(netloc=netloc))
 
 
 class _LinkTextParser(HTMLParser):
@@ -125,8 +148,16 @@ class HttpxWebsiteCrawler(WebsiteCrawler):
         current = normalize_website_url(url)
         try:
             for _ in range(MAX_REDIRECTS + 1):
-                assert_public_url(current)
-                response = self._client.get(current)
+                # Resolve+validate and pin the request to that exact IP so httpx's
+                # own connect-time DNS lookup can't be rebound to a different
+                # (private) address after the check above passes.
+                ip, host, port = _resolve_public_address(current)
+                pinned_url = _pin_request_url(current, ip, port)
+                response = self._client.get(
+                    pinned_url,
+                    headers={"Host": host},
+                    extensions={"sni_hostname": host},
+                )
                 if response.is_redirect and response.has_redirect_location:
                     current = urljoin(current, response.headers["location"])
                     continue

@@ -1,12 +1,20 @@
+import logging
+
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.domain.exceptions import ClinicNotFoundError, EnrichmentFailedError
+from app.domain.exceptions import (
+    ClinicNotFoundError,
+    EnrichmentFailedError,
+    ScoringConfigConflictError,
+)
 from app.infrastructure.config.settings import settings
 from app.infrastructure.logging_config import configure_logging
 from app.presentation.api.v1 import clinics, health, scoring_config
 from app.presentation.middleware.request_logging import RequestLoggingMiddleware
+
+logger = logging.getLogger(__name__)
 
 
 def create_app() -> FastAPI:
@@ -43,11 +51,31 @@ def create_app() -> FastAPI:
 
     @app.exception_handler(EnrichmentFailedError)
     async def enrichment_failed_handler(_: Request, exc: EnrichmentFailedError) -> JSONResponse:
+        # exc.detail can contain raw upstream provider error bodies (status, url,
+        # response text) — log it server-side only, never relay it to API clients.
+        logger.error("Enrichment failed for clinic %s: %s", exc.clinic_id, exc.detail)
         return JSONResponse(
             status_code=status.HTTP_502_BAD_GATEWAY,
             content={
                 "error": {
                     "code": "ENRICHMENT_FAILED",
+                    "message": (
+                        f"Enrichment failed for clinic {exc.clinic_id}. Please try again later."
+                    ),
+                    "details": None,
+                }
+            },
+        )
+
+    @app.exception_handler(ScoringConfigConflictError)
+    async def scoring_config_conflict_handler(
+        _: Request, exc: ScoringConfigConflictError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "error": {
+                    "code": "SCORING_CONFIG_CONFLICT",
                     "message": str(exc),
                     "details": None,
                 }

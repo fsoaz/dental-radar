@@ -4,7 +4,6 @@ Return ONLY JSON matching the schema. Scores are integers 0-100.
 USER:
 Clinic: {name}
 Website text (truncated): {site_text}
-Services: {services}
 Detected signals: {signals}
 Google rating: {rating} ({reviews} reviews)
 Locations: {locations_count}

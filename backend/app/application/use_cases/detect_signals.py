@@ -62,14 +62,11 @@ class DetectSignals:
 
         weights = self._scoring_config_repo.get_active_weights()
         detected = self._detection_service.detect(evidence)
+        locations_count = self._detection_service.estimate_locations_count(evidence)
 
-        locations_count = detail.clinic.locations_count
         now = datetime.now(UTC)
         signals: list[Signal] = []
         for item in detected:
-            if item.locations_count is not None:
-                locations_count = item.locations_count
-
             signals.append(
                 Signal(
                     id=uuid4(),

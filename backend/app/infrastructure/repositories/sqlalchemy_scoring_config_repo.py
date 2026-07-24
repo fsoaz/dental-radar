@@ -1,7 +1,9 @@
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError, NoResultFound
 from sqlalchemy.orm import Session
 
 from app.domain.entities.scoring_config import ScoreBand, ScoringConfig
+from app.domain.exceptions import ScoringConfigConflictError
 from app.domain.repositories.scoring_config_repo import ScoringConfigRepository
 from app.infrastructure.db.models import ScoringConfigModel
 
@@ -37,9 +39,15 @@ class SqlAlchemyScoringConfigRepository(ScoringConfigRepository):
         weights: dict[str, int],
         bands: list[dict],
     ) -> ScoringConfig:
-        current = self._session.execute(
-            select(ScoringConfigModel).where(ScoringConfigModel.active.is_(True))
-        ).scalar_one()
+        # Lock the active row for the duration of this transaction so a concurrent
+        # PUT blocks here instead of racing to compute the same next_version and
+        # hitting a primary-key collision on insert.
+        try:
+            current = self._session.execute(
+                select(ScoringConfigModel).where(ScoringConfigModel.active.is_(True)).with_for_update()
+            ).scalar_one()
+        except NoResultFound as exc:
+            raise ScoringConfigConflictError from exc
         current.active = False
 
         next_version = current.version + 1
@@ -50,6 +58,10 @@ class SqlAlchemyScoringConfigRepository(ScoringConfigRepository):
             bands=bands,
         )
         self._session.add(new_config)
-        self._session.commit()
+        try:
+            self._session.commit()
+        except IntegrityError as exc:
+            self._session.rollback()
+            raise ScoringConfigConflictError from exc
         self._session.refresh(new_config)
         return _model_to_config(new_config)

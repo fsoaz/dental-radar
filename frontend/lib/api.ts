@@ -3,6 +3,7 @@ import type {
   ClinicDetail,
   ClinicListQuery,
   ClinicListResponse,
+  FastApiValidationErrorBody,
   ScoringConfig,
 } from "@/lib/types";
 
@@ -53,9 +54,21 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     let message = response.statusText;
     let code: string | null = null;
     try {
-      const body = (await response.json()) as ApiErrorBody;
-      message = body.error?.message ?? message;
-      code = body.error?.code ?? null;
+      const body = (await response.json()) as ApiErrorBody | FastApiValidationErrorBody;
+      if ("error" in body && body.error?.message) {
+        message = body.error.message;
+        code = body.error.code ?? null;
+      } else if ("detail" in body && Array.isArray(body.detail)) {
+        // FastAPI's built-in request validation errors use {"detail": [...]},
+        // not this app's custom {"error": {...}} envelope.
+        message = body.detail
+          .map((item) => {
+            const field = item.loc?.slice(1).join(".") || "request";
+            return `${field}: ${item.msg}`;
+          })
+          .join("; ");
+        code = "VALIDATION_ERROR";
+      }
     } catch {
       // ignore parse errors
     }
@@ -82,7 +95,7 @@ export async function fetchClinics(query: ClinicListQuery = {}): Promise<ClinicL
 }
 
 export async function fetchClinicDetail(id: string): Promise<ClinicDetail> {
-  return request<ClinicDetail>(`/clinics/${id}`);
+  return request<ClinicDetail>(`/clinics/${encodeURIComponent(id)}`);
 }
 
 export async function fetchScoringConfig(): Promise<ScoringConfig> {

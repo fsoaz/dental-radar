@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { ClinicTable } from "@/components/clinic-table";
 import { FilterBar } from "@/components/filter-bar";
@@ -10,6 +10,7 @@ import { ApiRequestError, buildClinicListQuery, fetchClinics } from "@/lib/api";
 import type { ClinicListResponse } from "@/lib/types";
 
 export function ClinicsPageClient() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const searchParamsKey = searchParams.toString();
   const query = buildClinicListQuery(searchParams);
@@ -50,7 +51,7 @@ export function ClinicsPageClient() {
     const params = new URLSearchParams(searchParams.toString());
     if (page <= 1) params.delete("page");
     else params.set("page", String(page));
-    window.location.href = `/clinics?${params.toString()}`;
+    router.push(`/clinics?${params.toString()}`);
   }
 
   return (

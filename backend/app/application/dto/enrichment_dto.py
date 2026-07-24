@@ -13,7 +13,6 @@ class SignalSummary:
 class ClinicAIInput:
     name: str
     site_text: str
-    services: list[str]
     signals: list[SignalSummary]
     rating: float | None
     reviews: int

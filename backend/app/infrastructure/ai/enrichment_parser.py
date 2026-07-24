@@ -53,7 +53,6 @@ def build_user_prompt(payload: ClinicAIInput, max_site_text_chars: int) -> tuple
     user_prompt = user_template.format(
         name=payload.name,
         site_text=truncate_site_text(payload.site_text, max_site_text_chars),
-        services=", ".join(payload.services) if payload.services else "unknown",
         signals=format_signals(payload.signals),
         rating=payload.rating if payload.rating is not None else "unknown",
         reviews=payload.reviews,
@@ -66,7 +65,6 @@ def compute_input_fingerprint(payload: ClinicAIInput, max_site_text_chars: int) 
     data = {
         "name": payload.name,
         "site_text": truncate_site_text(payload.site_text, max_site_text_chars),
-        "services": sorted(payload.services),
         "signals": sorted(f"{signal.type}:{signal.evidence or ''}" for signal in payload.signals),
         "rating": payload.rating,
         "reviews": payload.reviews,

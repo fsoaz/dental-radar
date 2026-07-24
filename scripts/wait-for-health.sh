@@ -7,7 +7,7 @@ ENV_FILE="${ENV_FILE:-$ROOT_DIR/.env.production}"
 MAX_ATTEMPTS="${MAX_ATTEMPTS:-30}"
 SLEEP_SECONDS="${SLEEP_SECONDS:-5}"
 
-API_URL="${API_URL:-http://localhost:8000/api/v1/health/ready}"
+API_URL="${API_URL:-http://localhost:${API_PORT:-8000}/api/v1/health/ready}"
 
 attempt=1
 until curl -fsS "$API_URL" >/dev/null; do

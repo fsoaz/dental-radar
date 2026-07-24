@@ -36,12 +36,12 @@ def _build_score_stack(session):
 
 def run_discover(query: str) -> int:
     session = SessionLocal()
+    source = GooglePlacesClient(
+        settings.google_places_api_key,
+        max_pages=settings.places_max_pages,
+    )
     try:
         repo = SqlAlchemyClinicRepository(session)
-        source = GooglePlacesClient(
-            settings.google_places_api_key,
-            max_pages=settings.places_max_pages,
-        )
         use_case = DiscoverClinics(source, repo)
         result = use_case.execute(query)
         print(
@@ -50,6 +50,7 @@ def run_discover(query: str) -> int:
         )
         return 0
     finally:
+        source.close()
         session.close()
 
 
@@ -162,7 +163,6 @@ def run_test_connection() -> int:
                 "Welcome to Test Dental Clinic. We offer advanced orthodontics, implants, "
                 "and digital teeth whitening. We use state of the art laser scanners."
             ),
-            services=["Orthodontics", "Implants", "Whitening"],
             signals=[
                 SignalSummary(type="booking_system", evidence="Online appointment form found"),
                 SignalSummary(type="active_socials", evidence="Instagram link found"),

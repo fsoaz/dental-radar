@@ -105,7 +105,6 @@ class ClinicDetailResponse(BaseModel):
     google_rating: float | None = None
     google_review_count: int
     locations_count: int
-    services: list[str]
     social_urls: list[str]
     signals: list[SignalResponse]
     score: ScoreResponse | None = None

@@ -17,9 +17,16 @@ fi
 
 export IMAGE_TAG
 
+# GHCR/Docker require lowercase repository names; .github/workflows/deploy.yml
+# pushes images to a lowercased path, so pulling must match or it 404s/rejects
+# for any GITHUB_REPOSITORY containing uppercase characters.
+if [ -n "${GITHUB_REPOSITORY:-}" ]; then
+  export GITHUB_REPOSITORY="${GITHUB_REPOSITORY,,}"
+fi
+
 echo "Deploying Dental Radar (tag=${IMAGE_TAG})..."
-docker compose "${compose_args[@]}" pull api frontend || true
-docker compose "${compose_args[@]}" up -d --build
+docker compose "${compose_args[@]}" pull api frontend
+docker compose "${compose_args[@]}" up -d
 
 "$ROOT_DIR/scripts/wait-for-health.sh"
 echo "Deploy complete."

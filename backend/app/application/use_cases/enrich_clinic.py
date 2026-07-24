@@ -99,7 +99,6 @@ class EnrichClinic:
         return ClinicAIInput(
             name=detail.clinic.name,
             site_text=site_text,
-            services=list(detail.clinic.services),
             signals=signals,
             rating=detail.clinic.google_rating,
             reviews=detail.clinic.google_review_count,

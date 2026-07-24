@@ -21,17 +21,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
     && rm -rf /var/lib/apt/lists/*
 
+RUN addgroup --system --gid 1001 app && adduser --system --uid 1001 --gid 1001 app
+
 COPY --from=builder /usr/local /usr/local
 COPY alembic.ini ./
 COPY app ./app
 COPY cli.py ./cli.py
 COPY scripts/docker-entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+RUN chmod +x /entrypoint.sh && chown -R app:app /app
 
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
 ENV PORT=8000
 
+USER app
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \

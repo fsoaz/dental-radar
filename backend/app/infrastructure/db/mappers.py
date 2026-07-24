@@ -14,7 +14,6 @@ def clinic_model_to_entity(model: ClinicModel) -> Clinic:
         google_rating=float(model.google_rating) if model.google_rating is not None else None,
         google_review_count=model.google_review_count,
         locations_count=model.locations_count,
-        services=list(model.services or []),
         social_urls=list(model.social_urls or []),
         created_at=model.created_at,
         updated_at=model.updated_at,

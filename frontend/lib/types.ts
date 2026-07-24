@@ -58,7 +58,6 @@ export interface ClinicDetail {
   google_rating: number | null;
   google_review_count: number;
   locations_count: number;
-  services: string[];
   social_urls: string[];
   signals: Signal[];
   score: Score | null;
@@ -84,6 +83,16 @@ export interface ApiErrorBody {
     message: string;
     details: Record<string, unknown> | null;
   };
+}
+
+// FastAPI's default shape for its own built-in request validation errors —
+// distinct from this app's custom ApiErrorBody envelope above.
+export interface FastApiValidationErrorBody {
+  detail: Array<{
+    loc: Array<string | number>;
+    msg: string;
+    type: string;
+  }>;
 }
 
 export interface ClinicListQuery {

@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from contextlib import contextmanager
 
 import httpx
 
@@ -16,6 +17,31 @@ from app.infrastructure.config.settings import DEFAULT_OPENAI_BASE_URL
 
 class TransientLLMError(Exception):
     pass
+
+
+class ConfigurationError(Exception):
+    """Raised for permanent provider misconfiguration (e.g. missing API key).
+
+    Not retried by analyze_clinic_with_retries — retrying a config error just
+    wastes the retry budget on something that will never succeed.
+    """
+
+
+@contextmanager
+def _wrap_transient_errors(provider_name: str):
+    """Reclassify network/parse failures as TransientLLMError so retry+fallback engage.
+
+    Without this, a plain connection timeout or a malformed API response bypasses
+    analyze_clinic_with_retries entirely (it only catches TransientLLMError).
+    """
+    try:
+        yield
+    except (TransientLLMError, ConfigurationError, httpx.HTTPStatusError):
+        raise
+    except httpx.RequestError as exc:
+        raise TransientLLMError(f"{provider_name} network error: {exc}") from exc
+    except (KeyError, IndexError, ValueError) as exc:
+        raise TransientLLMError(f"{provider_name} returned an unparsable response: {exc}") from exc
 
 
 class BaseLLMProvider(ABC, LLMProvider):
@@ -102,27 +128,28 @@ class GPTProvider(BaseLLMProvider):
 
     def _complete(self, system_prompt: str, user_prompt: str) -> str:
         if not self._api_key:
-            raise TransientLLMError("OPENAI_API_KEY is not configured")
+            raise ConfigurationError("OPENAI_API_KEY is not configured")
 
-        response = httpx.post(
-            f"{self._base_url}/chat/completions",
-            headers={
-                "Authorization": f"Bearer {self._api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": self._model,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                "response_format": {"type": "json_object"},
-            },
-            timeout=self._timeout_seconds,
-        )
-        self._raise_for_status(response)
-        body = response.json()
-        return body["choices"][0]["message"]["content"]
+        with _wrap_transient_errors(self.provider_name):
+            response = httpx.post(
+                f"{self._base_url}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {self._api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": self._model,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    "response_format": {"type": "json_object"},
+                },
+                timeout=self._timeout_seconds,
+            )
+            self._raise_for_status(response)
+            body = response.json()
+            return body["choices"][0]["message"]["content"]
 
 
 class ClaudeProvider(BaseLLMProvider):
@@ -132,28 +159,29 @@ class ClaudeProvider(BaseLLMProvider):
 
     def _complete(self, system_prompt: str, user_prompt: str) -> str:
         if not self._api_key:
-            raise TransientLLMError("ANTHROPIC_API_KEY is not configured")
+            raise ConfigurationError("ANTHROPIC_API_KEY is not configured")
 
-        response = httpx.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "x-api-key": self._api_key,
-                "anthropic-version": "2023-06-01",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": self._model,
-                "max_tokens": 512,
-                "system": system_prompt,
-                "messages": [{"role": "user", "content": user_prompt}],
-            },
-            timeout=self._timeout_seconds,
-        )
-        self._raise_for_status(response)
-        body = response.json()
-        parts = body.get("content") or []
-        texts = [part.get("text", "") for part in parts if part.get("type") == "text"]
-        return "".join(texts)
+        with _wrap_transient_errors(self.provider_name):
+            response = httpx.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "x-api-key": self._api_key,
+                    "anthropic-version": "2023-06-01",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": self._model,
+                    "max_tokens": 512,
+                    "system": system_prompt,
+                    "messages": [{"role": "user", "content": user_prompt}],
+                },
+                timeout=self._timeout_seconds,
+            )
+            self._raise_for_status(response)
+            body = response.json()
+            parts = body.get("content") or []
+            texts = [part.get("text", "") for part in parts if part.get("type") == "text"]
+            return "".join(texts)
 
 
 class GeminiProvider(BaseLLMProvider):
@@ -163,29 +191,30 @@ class GeminiProvider(BaseLLMProvider):
 
     def _complete(self, system_prompt: str, user_prompt: str) -> str:
         if not self._api_key:
-            raise TransientLLMError("GEMINI_API_KEY is not configured")
+            raise ConfigurationError("GEMINI_API_KEY is not configured")
 
         url = (
             f"https://generativelanguage.googleapis.com/v1beta/models/{self._model}:generateContent"
         )
-        response = httpx.post(
-            url,
-            headers={
-                "x-goog-api-key": self._api_key,
-                "Content-Type": "application/json",
-            },
-            json={
-                "systemInstruction": {"parts": [{"text": system_prompt}]},
-                "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
-                "generationConfig": {"responseMimeType": "application/json"},
-            },
-            timeout=self._timeout_seconds,
-        )
-        self._raise_for_status(response)
-        body = response.json()
-        candidates = body.get("candidates") or []
-        if not candidates:
-            raise TransientLLMError("Gemini returned no candidates")
-        parts = candidates[0].get("content", {}).get("parts") or []
-        texts = [part.get("text", "") for part in parts if part.get("text")]
-        return "".join(texts)
+        with _wrap_transient_errors(self.provider_name):
+            response = httpx.post(
+                url,
+                headers={
+                    "x-goog-api-key": self._api_key,
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "systemInstruction": {"parts": [{"text": system_prompt}]},
+                    "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
+                    "generationConfig": {"responseMimeType": "application/json"},
+                },
+                timeout=self._timeout_seconds,
+            )
+            self._raise_for_status(response)
+            body = response.json()
+            candidates = body.get("candidates") or []
+            if not candidates:
+                raise TransientLLMError("Gemini returned no candidates")
+            parts = candidates[0].get("content", {}).get("parts") or []
+            texts = [part.get("text", "") for part in parts if part.get("text")]
+            return "".join(texts)
