@@ -90,6 +90,16 @@ docker compose up -d postgres
 docker compose exec postgres createdb -U dental_radar dental_radar_test
 ```
 
+### Pre-commit hooks
+
+Ruff lint/format run in CI (`ruff check .`, `ruff format --check .`). Install the
+pre-commit hook once to catch violations before pushing:
+
+```bash
+pip install pre-commit
+pre-commit install
+```
+
 ## CLI
 
 ```bash

@@ -44,7 +44,9 @@ class SqlAlchemyScoringConfigRepository(ScoringConfigRepository):
         # hitting a primary-key collision on insert.
         try:
             current = self._session.execute(
-                select(ScoringConfigModel).where(ScoringConfigModel.active.is_(True)).with_for_update()
+                select(ScoringConfigModel)
+                .where(ScoringConfigModel.active.is_(True))
+                .with_for_update()
             ).scalar_one()
         except NoResultFound as exc:
             raise ScoringConfigConflictError from exc
