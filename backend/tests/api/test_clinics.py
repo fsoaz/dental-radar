@@ -36,7 +36,7 @@ def test_discover_endpoint_returns_counts(app_client):
     ]
 
     response = client.post("/api/v1/clinics/discover", json={"query": "dentist in Lisbon"})
-    assert response.status_code == 202
+    assert response.status_code == 200
     assert response.json() == {"ingested": 2, "created": 2, "updated": 0}
 
 

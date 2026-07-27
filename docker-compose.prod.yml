@@ -28,6 +28,11 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-dental_radar}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-dental_radar}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      API_KEY: ${API_KEY:?API_KEY is required}
+      # Never enable in production. Empty API_KEY without this fails closed (503).
+      ALLOW_UNAUTHENTICATED: "false"
+      RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-30}
+      RATE_LIMIT_TRUSTED_PROXIES: ${RATE_LIMIT_TRUSTED_PROXIES:-}
       GOOGLE_PLACES_API_KEY: ${GOOGLE_PLACES_API_KEY:-}
       PLACES_MAX_PAGES: ${PLACES_MAX_PAGES:-3}
       AI_PROVIDER: ${AI_PROVIDER:-gpt}
@@ -45,8 +50,11 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       LOG_JSON: ${LOG_JSON:-true}
       APP_ENV: production
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-}
+    # Bind loopback by default so the API is not exposed on all interfaces.
+    # Front with a reverse proxy on the host, or override API_BIND for LAN access.
     ports:
-      - "${API_PORT:-8000}:8000"
+      - "${API_BIND:-127.0.0.1}:${API_PORT:-8000}:8000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -62,11 +70,12 @@ services:
     build:
       context: ./frontend
       args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
+        # Must be the public browser-reachable API URL. No localhost default —
+        # a missing value fails the build loudly instead of shipping a broken UI.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?NEXT_PUBLIC_API_URL is required}
     restart: unless-stopped
     environment:
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
-      API_URL: http://api:8000/api/v1
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?NEXT_PUBLIC_API_URL is required}
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
     depends_on:

@@ -32,7 +32,7 @@ describe("FilterBar", () => {
     await user.type(screen.getByLabelText("State filter"), "Lisboa");
     await user.click(screen.getByRole("button", { name: "Apply filters" }));
 
-    expect(push).toHaveBeenCalledWith("/clinics?q=Smile&state=Lisboa&sort=-score");
+    expect(push).toHaveBeenCalledWith("/clinics?q=Smile&state=Lisboa");
   });
 
   it("clears filters", async () => {

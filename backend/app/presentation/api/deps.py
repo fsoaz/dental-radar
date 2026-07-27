@@ -1,6 +1,7 @@
 from collections.abc import Generator
+from secrets import compare_digest
 
-from fastapi import Depends
+from fastapi import Depends, Header
 from sqlalchemy.orm import Session
 
 from app.application.use_cases.compute_score import (
@@ -14,6 +15,7 @@ from app.application.use_cases.detect_signals import DetectSignals, ListClinicSi
 from app.application.use_cases.discover_clinics import DiscoverClinics
 from app.application.use_cases.enrich_clinic import EnrichAllClinics, EnrichClinic
 from app.application.use_cases.list_clinics import GetClinic, ListClinics
+from app.domain.exceptions import ApiKeyNotConfiguredError, UnauthorizedError
 from app.infrastructure.config.settings import settings
 from app.infrastructure.crawler.website_crawler import HttpxWebsiteCrawler
 from app.infrastructure.db.session import SessionLocal
@@ -35,6 +37,26 @@ def get_db_session() -> Generator[Session, None, None]:
         yield db
     finally:
         db.close()
+
+
+def require_api_key(
+    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
+) -> None:
+    """Gate mutating routes behind X-API-Key.
+
+    Fails closed: an empty API_KEY rejects with 503 unless
+    ``ALLOW_UNAUTHENTICATED=true`` is set explicitly (local/test only).
+    Relying on ``APP_ENV != production`` alone is not enough — a hand-rolled
+    deploy that forgets ``APP_ENV=production`` must not silently open billed
+    endpoints.
+    """
+    expected = (settings.api_key or "").strip()
+    if not expected:
+        if settings.allow_unauthenticated:
+            return
+        raise ApiKeyNotConfiguredError()
+    if not x_api_key or not compare_digest(x_api_key, expected):
+        raise UnauthorizedError()
 
 
 def get_clinic_repository(session: Session = Depends(get_db_session)) -> SqlAlchemyClinicRepository:

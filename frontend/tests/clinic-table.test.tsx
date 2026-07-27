@@ -1,5 +1,5 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { ClinicTable } from "@/components/clinic-table";
 import type { ClinicListItem } from "@/lib/types";
@@ -26,6 +26,10 @@ const clinics: ClinicListItem[] = [
 ];
 
 describe("ClinicTable", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   it("renders clinic rows with score and priority", () => {
     render(<ClinicTable clinics={clinics} />);
 
@@ -43,5 +47,14 @@ describe("ClinicTable", () => {
   it("shows empty state when no clinics", () => {
     render(<ClinicTable clinics={[]} />);
     expect(screen.getByText("No clinics match your filters")).toBeInTheDocument();
+  });
+
+  it("preserves list query on clinic links", () => {
+    render(<ClinicTable clinics={clinics} listQuery="priority=HOT&page=3" />);
+
+    expect(screen.getByRole("link", { name: "Smile Dental" })).toHaveAttribute(
+      "href",
+      "/clinics/11111111-1111-1111-1111-111111111111?priority=HOT&page=3",
+    );
   });
 });

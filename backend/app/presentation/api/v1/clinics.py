@@ -1,3 +1,4 @@
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
@@ -8,7 +9,10 @@ from app.application.use_cases.discover_clinics import DiscoverClinics
 from app.application.use_cases.enrich_clinic import EnrichClinic
 from app.application.use_cases.list_clinics import GetClinic, ListClinics
 from app.domain.entities.signal import Signal
+from app.domain.exceptions import InvalidQueryError
 from app.domain.repositories.clinic_repo import ClinicListQuery
+from app.domain.value_objects.priority import PriorityLevel
+from app.domain.value_objects.signal_type import SignalType
 from app.presentation.api.deps import (
     get_compute_score,
     get_detect_signals,
@@ -17,6 +21,7 @@ from app.presentation.api.deps import (
     get_get_clinic,
     get_list_clinic_signals,
     get_list_clinics,
+    require_api_key,
 )
 from app.presentation.api.v1.schemas.clinic import (
     AddressResponse,
@@ -35,6 +40,8 @@ from app.presentation.api.v1.schemas.clinic import (
     SignalResponse,
 )
 
+SortOption = Literal["-score", "score", "name"]
+
 
 def _signal_to_response(signal: Signal) -> SignalResponse:
     return SignalResponse(
@@ -52,7 +59,8 @@ router = APIRouter(prefix="/clinics", tags=["clinics"])
 @router.post(
     "/discover",
     response_model=DiscoverClinicsResponse,
-    status_code=status.HTTP_202_ACCEPTED,
+    status_code=status.HTTP_200_OK,
+    dependencies=[Depends(require_api_key)],
 )
 def discover_clinics(
     body: DiscoverClinicsRequest,
@@ -70,25 +78,28 @@ def discover_clinics(
 def list_clinics(
     q: str | None = Query(default=None),
     state: str | None = Query(default=None),
-    priority: str | None = Query(default=None),
+    priority: PriorityLevel | None = Query(default=None),
     min_score: int | None = Query(default=None, ge=0),
     max_score: int | None = Query(default=None, ge=0),
     has_website: bool | None = Query(default=None),
-    signal_type: str | None = Query(default=None),
-    sort: str = Query(default="-score"),
+    signal_type: SignalType | None = Query(default=None),
+    sort: SortOption = Query(default="-score"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     use_case: ListClinics = Depends(get_list_clinics),
 ) -> ClinicListResponse:
+    if min_score is not None and max_score is not None and min_score > max_score:
+        raise InvalidQueryError("min_score must be <= max_score")
+
     result = use_case.execute(
         ClinicListQuery(
             q=q,
             state=state,
-            priority=priority,
+            priority=priority.value if priority else None,
             min_score=min_score,
             max_score=max_score,
             has_website=has_website,
-            signal_type=signal_type,
+            signal_type=signal_type.value if signal_type else None,
             sort=sort,
             page=page,
             page_size=page_size,
@@ -116,8 +127,9 @@ def list_clinics(
 @router.post(
     "/{clinic_id}/signals:detect",
     response_model=DetectSignalsResponse,
-    status_code=status.HTTP_202_ACCEPTED,
+    status_code=status.HTTP_200_OK,
     responses={404: {"model": ErrorResponse}},
+    dependencies=[Depends(require_api_key)],
 )
 def detect_clinic_signals(
     clinic_id: UUID,
@@ -148,8 +160,9 @@ def list_clinic_signals(
 @router.post(
     "/{clinic_id}/score",
     response_model=ComputeScoreResponse,
-    status_code=status.HTTP_202_ACCEPTED,
+    status_code=status.HTTP_200_OK,
     responses={404: {"model": ErrorResponse}},
+    dependencies=[Depends(require_api_key)],
 )
 def compute_clinic_score(
     clinic_id: UUID,
@@ -168,8 +181,9 @@ def compute_clinic_score(
 @router.post(
     "/{clinic_id}/enrich",
     response_model=EnrichClinicResponse,
-    status_code=status.HTTP_202_ACCEPTED,
+    status_code=status.HTTP_200_OK,
     responses={404: {"model": ErrorResponse}, 502: {"model": ErrorResponse}},
+    dependencies=[Depends(require_api_key)],
 )
 def enrich_clinic(
     clinic_id: UUID,

@@ -11,6 +11,15 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql://dental_radar:dental_radar@localhost:5432/dental_radar"
     jwt_secret: str = "change-me-in-production"
+    api_key: str = ""
+    # Escape hatch for local/test only. When False (default), an empty API_KEY
+    # rejects mutating routes with 503 — auth fails closed even if APP_ENV is
+    # left at its development default.
+    allow_unauthenticated: bool = False
+    rate_limit_per_minute: int = 30
+    # Comma-separated proxy IPs/CIDRs whose X-Forwarded-For may be trusted for
+    # rate-limit client identification. Empty means trust none (use peer IP).
+    rate_limit_trusted_proxies: str = ""
     google_places_api_key: str = ""
     places_max_pages: int = 3
     ai_provider: str = "gpt"

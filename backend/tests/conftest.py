@@ -8,7 +8,19 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.infrastructure.config.settings import settings
 from app.main import create_app
+
+
+@pytest.fixture(autouse=True)
+def _allow_unauthenticated_in_tests(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the existing suite free of X-API-Key headers.
+
+    Production defaults fail closed (empty API_KEY → 503). Tests opt into the
+    explicit local escape hatch unless a case overrides it.
+    """
+    monkeypatch.setattr(settings, "allow_unauthenticated", True)
+    monkeypatch.setattr(settings, "api_key", "")
 
 
 @pytest.fixture(scope="session")

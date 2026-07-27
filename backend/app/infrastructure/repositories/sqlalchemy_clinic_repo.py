@@ -18,7 +18,18 @@ from app.infrastructure.db.mappers import (
     clinic_model_to_entity,
     location_model_to_entity,
 )
-from app.infrastructure.db.models import ClinicModel, LocationModel, ScoreModel, SignalModel
+from app.infrastructure.db.models import (
+    ClinicModel,
+    EnrichmentModel,
+    LocationModel,
+    ScoreModel,
+    SignalModel,
+)
+
+
+def _escape_like(term: str) -> str:
+    """Escape LIKE metacharacters so user input is matched literally."""
+    return term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 class SqlAlchemyClinicRepository(ClinicRepository):
@@ -122,6 +133,7 @@ class SqlAlchemyClinicRepository(ClinicRepository):
                 "applied_weight": signal.applied_weight,
                 "evidence": signal.evidence,
                 "confidence": float(signal.confidence),
+                "detected_at": signal.detected_at,
             }
             for signal in clinic_model.signals
         ]
@@ -135,68 +147,43 @@ class SqlAlchemyClinicRepository(ClinicRepository):
         )
 
     def list_clinics(self, query: ClinicListQuery) -> ClinicListResult:
-        stmt = select(ClinicModel).options(
-            selectinload(ClinicModel.locations),
-            selectinload(ClinicModel.score),
-            selectinload(ClinicModel.enrichment),
+        stmt = (
+            select(ClinicModel)
+            .outerjoin(ScoreModel, ScoreModel.clinic_id == ClinicModel.id)
+            .outerjoin(EnrichmentModel, EnrichmentModel.clinic_id == ClinicModel.id)
+            .options(
+                selectinload(ClinicModel.locations),
+                selectinload(ClinicModel.score),
+                selectinload(ClinicModel.enrichment),
+            )
         )
-
-        joined_location = False
 
         if query.q or query.state:
             stmt = stmt.join(
                 LocationModel,
                 (LocationModel.clinic_id == ClinicModel.id) & LocationModel.is_primary.is_(True),
             )
-            joined_location = True
 
         if query.q:
-            pattern = f"%{query.q}%"
-            if not joined_location:
-                stmt = stmt.join(
-                    LocationModel,
-                    (LocationModel.clinic_id == ClinicModel.id)
-                    & LocationModel.is_primary.is_(True),
-                )
-                joined_location = True
+            pattern = f"%{_escape_like(query.q)}%"
             stmt = stmt.where(
                 or_(
-                    ClinicModel.name.ilike(pattern),
-                    LocationModel.city.ilike(pattern),
+                    ClinicModel.name.ilike(pattern, escape="\\"),
+                    LocationModel.city.ilike(pattern, escape="\\"),
                 )
             )
 
         if query.state:
-            if not joined_location:
-                stmt = stmt.join(
-                    LocationModel,
-                    (LocationModel.clinic_id == ClinicModel.id)
-                    & LocationModel.is_primary.is_(True),
-                )
-                joined_location = True
-            stmt = stmt.where(LocationModel.state.ilike(query.state))
-
-        score_total = (
-            select(ScoreModel.total)
-            .where(ScoreModel.clinic_id == ClinicModel.id)
-            .correlate(ClinicModel)
-            .scalar_subquery()
-        )
-        score_priority = (
-            select(ScoreModel.priority)
-            .where(ScoreModel.clinic_id == ClinicModel.id)
-            .correlate(ClinicModel)
-            .scalar_subquery()
-        )
+            stmt = stmt.where(LocationModel.state.ilike(_escape_like(query.state), escape="\\"))
 
         if query.priority:
-            stmt = stmt.where(score_priority.ilike(query.priority))
+            stmt = stmt.where(ScoreModel.priority == query.priority.upper())
 
         if query.min_score is not None:
-            stmt = stmt.where(score_total >= query.min_score)
+            stmt = stmt.where(ScoreModel.total >= query.min_score)
 
         if query.max_score is not None:
-            stmt = stmt.where(score_total <= query.max_score)
+            stmt = stmt.where(ScoreModel.total <= query.max_score)
 
         if query.has_website is True:
             stmt = stmt.where(ClinicModel.website.is_not(None), ClinicModel.website != "")
@@ -207,26 +194,26 @@ class SqlAlchemyClinicRepository(ClinicRepository):
             stmt = stmt.where(
                 exists().where(
                     SignalModel.clinic_id == ClinicModel.id,
-                    SignalModel.type.ilike(query.signal_type),
+                    SignalModel.type == query.signal_type.upper(),
                 )
             )
 
-        count_query = select(func.count()).select_from(stmt.subquery())
+        count_query = select(func.count()).select_from(stmt.order_by(None).subquery())
         total = self._session.execute(count_query).scalar_one()
 
-        if query.sort == "-score":
-            order = score_total.desc().nullslast()
-        elif query.sort == "score":
-            order = score_total.asc().nullsfirst()
+        if query.sort == "score":
+            order = ScoreModel.total.asc().nullsfirst()
         elif query.sort == "name":
             order = ClinicModel.name.asc()
         else:
-            order = score_total.desc().nullslast()
+            # Default and "-score"
+            order = ScoreModel.total.desc().nullslast()
 
         offset = (query.page - 1) * query.page_size
         clinic_models = (
             self._session.execute(stmt.order_by(order).offset(offset).limit(query.page_size))
             .scalars()
+            .unique()
             .all()
         )
 

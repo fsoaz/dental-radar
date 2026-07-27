@@ -13,7 +13,7 @@ class SqlAlchemyScoreRepository:
     def __init__(self, session: Session) -> None:
         self._session = session
 
-    def upsert(self, score: Score) -> Score:
+    def upsert(self, score: Score, *, commit: bool = True) -> Score:
         existing = self._session.execute(
             select(ScoreModel).where(ScoreModel.clinic_id == score.clinic_id)
         ).scalar_one_or_none()
@@ -37,7 +37,10 @@ class SqlAlchemyScoreRepository:
             existing.config_version = score.config_version
             existing.computed_at = score.computed_at
 
-        self._session.commit()
+        if commit:
+            self._session.commit()
+        else:
+            self._session.flush()
         persisted = self.get_by_clinic(score.clinic_id)
         assert persisted is not None
         return persisted

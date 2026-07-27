@@ -23,6 +23,13 @@ services:
     environment:
       DATABASE_URL: postgresql://dental_radar:dental_radar@postgres:5432/dental_radar
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      API_KEY: ${API_KEY:-}
+      # Local compose only — mutating routes stay open when API_KEY is empty.
+      # Production compose must NOT set this (defaults fail closed).
+      ALLOW_UNAUTHENTICATED: ${ALLOW_UNAUTHENTICATED:-true}
+      RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-60}
+      RATE_LIMIT_TRUSTED_PROXIES: ${RATE_LIMIT_TRUSTED_PROXIES:-}
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-}
       GOOGLE_PLACES_API_KEY: ${GOOGLE_PLACES_API_KEY:-}
       PLACES_MAX_PAGES: ${PLACES_MAX_PAGES:-3}
       AI_PROVIDER: ${AI_PROVIDER:-gpt}

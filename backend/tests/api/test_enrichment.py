@@ -97,7 +97,7 @@ def test_enrich_clinic_endpoint(client, db_session, enrichment_stack):
 
     with TestClient(app) as api_client:
         response = api_client.post(f"/api/v1/clinics/{clinic.id}/enrich")
-        assert response.status_code == 202
+        assert response.status_code == 200
         body = response.json()
         assert body["growth_probability"] == 78
         assert body["provider"] == "fake"

@@ -39,8 +39,26 @@ class ComputeScore:
         detail = self._clinic_repo.get_detail(clinic_id)
         if detail is None:
             raise ClinicNotFoundError(str(clinic_id))
-
         config = self._scoring_config_repo.get_active_config()
+        return self._score_clinic(clinic_id, config, commit=True)
+
+    def execute_existing(
+        self,
+        clinic_id: UUID,
+        config: ScoringConfig,
+        *,
+        commit: bool = True,
+    ) -> ComputeScoreResult:
+        """Score a clinic known to exist (used by batch rescore)."""
+        return self._score_clinic(clinic_id, config, commit=commit)
+
+    def _score_clinic(
+        self,
+        clinic_id: UUID,
+        config: ScoringConfig,
+        *,
+        commit: bool,
+    ) -> ComputeScoreResult:
         signals = self._signal_repo.list_by_clinic(clinic_id)
         computed = self._scoring_service.compute(signals, config)
 
@@ -52,7 +70,7 @@ class ComputeScore:
             score_id=existing.id if existing else uuid4(),
             computed_at=datetime.now(UTC),
         )
-        self._score_repo.upsert(score)
+        self._score_repo.upsert(score, commit=commit)
 
         return ComputeScoreResult(
             clinic_id=clinic_id,
@@ -72,10 +90,23 @@ class RescoreAll:
         self._clinic_repo = clinic_repo
         self._compute_score = compute_score
 
-    def execute(self) -> list[ComputeScoreResult]:
+    def execute(self, *, commit_each: bool = False) -> list[ComputeScoreResult]:
+        """Rescore every clinic.
+
+        When ``commit_each`` is False (default for config updates), scores are
+        flushed in one transaction and committed by the caller — avoiding N
+        round-trips and partial multi-version state on failure.
+        """
+        config = self._compute_score._scoring_config_repo.get_active_config()
         results: list[ComputeScoreResult] = []
         for clinic_id in self._clinic_repo.list_all_ids():
-            results.append(self._compute_score.execute(clinic_id))
+            results.append(
+                self._compute_score.execute_existing(
+                    clinic_id,
+                    config,
+                    commit=commit_each,
+                )
+            )
         return results
 
 
@@ -110,11 +141,20 @@ class UpdateScoringConfig:
         self._rescore_all = rescore_all
 
     def execute(self, request: UpdateScoringConfigRequest) -> UpdateScoringConfigResult:
+        # Defer commit when rescoring so a mid-loop failure rolls back the new
+        # config together with any partial score writes.
+        defer_commit = bool(request.rescore and self._rescore_all is not None)
         config = self._scoring_config_repo.update_active_config(
             weights=request.weights,
             bands=request.bands,
+            commit=not defer_commit,
         )
         rescored = 0
-        if request.rescore and self._rescore_all is not None:
-            rescored = len(self._rescore_all.execute())
+        if defer_commit and self._rescore_all is not None:
+            try:
+                rescored = len(self._rescore_all.execute(commit_each=False))
+                self._scoring_config_repo.commit()
+            except Exception:
+                self._scoring_config_repo.rollback()
+                raise
         return UpdateScoringConfigResult(config=config, rescored=rescored)

@@ -91,7 +91,7 @@ def test_detect_endpoint(client, db_session, signal_stack):
 
     with TestClient(app) as api_client:
         response = api_client.post(f"/api/v1/clinics/{clinic.id}/signals:detect")
-        assert response.status_code == 202
+        assert response.status_code == 200
         body = response.json()
         assert body["detected"] == 1
         assert body["signals"][0]["type"] == "HIRING"

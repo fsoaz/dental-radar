@@ -41,10 +41,11 @@ class DetectSignals:
             raise ClinicNotFoundError(str(clinic_id))
 
         if not detail.clinic.website:
-            persisted = self._signal_repo.replace_for_clinic(clinic_id, [])
+            # Retain prior signals — missing website is not evidence of absence.
+            existing = self._signal_repo.list_by_clinic(clinic_id)
             return DetectSignalsResult(
                 detected=0,
-                signals=persisted,
+                signals=existing,
                 skipped=True,
                 skip_reason="Clinic has no website",
             )
@@ -52,10 +53,11 @@ class DetectSignals:
         try:
             evidence = self._crawler.fetch(detail.clinic.website)
         except WebsiteFetchError as exc:
-            persisted = self._signal_repo.replace_for_clinic(clinic_id, [])
+            # Retain prior signals — crawl failure must not wipe scoring input.
+            existing = self._signal_repo.list_by_clinic(clinic_id)
             return DetectSignalsResult(
                 detected=0,
-                signals=persisted,
+                signals=existing,
                 skipped=True,
                 skip_reason=str(exc),
             )

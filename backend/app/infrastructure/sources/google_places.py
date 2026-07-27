@@ -2,6 +2,7 @@ import httpx
 
 from app.application.dto.clinic_dto import ClinicData
 from app.application.ports.clinic_source import ClinicSource
+from app.domain.exceptions import ClinicSourceError
 from app.domain.value_objects.address import Address
 
 PLACES_SEARCH_URL = "https://places.googleapis.com/v1/places:searchText"
@@ -40,7 +41,10 @@ class GooglePlacesClient(ClinicSource):
 
     def search(self, query: str) -> list[ClinicData]:
         if not self._api_key:
-            raise ValueError("GOOGLE_PLACES_API_KEY is not configured")
+            raise ClinicSourceError(
+                "Google Places API key is not configured",
+                code="DISCOVERY_UNAVAILABLE",
+            )
 
         places: list[dict] = []
         page_token: str | None = None
@@ -50,16 +54,39 @@ class GooglePlacesClient(ClinicSource):
             if page_token:
                 body["pageToken"] = page_token
 
-            response = self._client.post(
-                PLACES_SEARCH_URL,
-                headers={
-                    "X-Goog-Api-Key": self._api_key,
-                    "X-Goog-FieldMask": SEARCH_FIELD_MASK,
-                    "Content-Type": "application/json",
-                },
-                json=body,
-            )
-            response.raise_for_status()
+            try:
+                response = self._client.post(
+                    PLACES_SEARCH_URL,
+                    headers={
+                        "X-Goog-Api-Key": self._api_key,
+                        "X-Goog-FieldMask": SEARCH_FIELD_MASK,
+                        "Content-Type": "application/json",
+                    },
+                    json=body,
+                )
+                response.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                status = exc.response.status_code
+                if status == 429:
+                    raise ClinicSourceError(
+                        "Google Places API quota exhausted",
+                        code="DISCOVERY_QUOTA_EXCEEDED",
+                    ) from exc
+                if status in {401, 403}:
+                    raise ClinicSourceError(
+                        "Google Places API key is invalid or unauthorized",
+                        code="DISCOVERY_UNAUTHORIZED",
+                    ) from exc
+                raise ClinicSourceError(
+                    "Google Places API is temporarily unavailable",
+                    code="DISCOVERY_UNAVAILABLE",
+                ) from exc
+            except httpx.HTTPError as exc:
+                raise ClinicSourceError(
+                    "Google Places API is temporarily unavailable",
+                    code="DISCOVERY_UNAVAILABLE",
+                ) from exc
+
             payload = response.json()
             places.extend(payload.get("places", []))
             page_token = payload.get("nextPageToken")

@@ -19,7 +19,22 @@ export class ApiRequestError extends Error {
   }
 }
 
+const API_KEY_STORAGE = "dental_radar_api_key";
+
+export function getStoredApiKey(): string {
+  if (typeof window === "undefined") return "";
+  return window.localStorage.getItem(API_KEY_STORAGE) ?? "";
+}
+
+export function setStoredApiKey(value: string): void {
+  if (typeof window === "undefined") return;
+  if (value) window.localStorage.setItem(API_KEY_STORAGE, value);
+  else window.localStorage.removeItem(API_KEY_STORAGE);
+}
+
 export function getApiBaseUrl(): string {
+  // Browser: NEXT_PUBLIC_* is inlined at build time. Prefer an explicit public URL;
+  // fall back to same-origin so a reverse-proxied deploy works without rebuild.
   if (typeof window === "undefined") {
     return (
       process.env.API_URL ??
@@ -27,7 +42,7 @@ export function getApiBaseUrl(): string {
       "http://localhost:8000/api/v1"
     );
   }
-  return process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
+  return process.env.NEXT_PUBLIC_API_URL || "/api/v1";
 }
 
 function buildQuery(params: Record<string, string | number | boolean | undefined>): string {
@@ -40,15 +55,42 @@ function buildQuery(params: Record<string, string | number | boolean | undefined
   return query ? `?${query}` : "";
 }
 
+function parsePositiveInt(raw: string | null, fallback: number): number {
+  if (raw == null || raw === "") return fallback;
+  const value = Number(raw);
+  return Number.isFinite(value) && value >= 1 ? Math.floor(value) : fallback;
+}
+
+function parseOptionalNonNegInt(raw: string | null): number | undefined {
+  if (raw == null || raw === "") return undefined;
+  const value = Number(raw);
+  return Number.isFinite(value) && value >= 0 ? Math.floor(value) : undefined;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${getApiBaseUrl()}${path}`, {
-    ...init,
-    headers: {
-      Accept: "application/json",
-      ...(init?.headers ?? {}),
-    },
-    cache: "no-store",
-  });
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    ...(init?.headers as Record<string, string> | undefined),
+  };
+  const method = (init?.method ?? "GET").toUpperCase();
+  if (method !== "GET" && method !== "HEAD") {
+    const apiKey = getStoredApiKey();
+    if (apiKey) headers["X-API-Key"] = apiKey;
+    if (init?.body && !headers["Content-Type"]) {
+      headers["Content-Type"] = "application/json";
+    }
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(`${getApiBaseUrl()}${path}`, {
+      ...init,
+      headers,
+      cache: "no-store",
+    });
+  } catch {
+    throw new ApiRequestError("Can't reach the service. Check that the API is running.", 0, "NETWORK_ERROR");
+  }
 
   if (!response.ok) {
     let message = response.statusText;
@@ -59,8 +101,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
         message = body.error.message;
         code = body.error.code ?? null;
       } else if ("detail" in body && Array.isArray(body.detail)) {
-        // FastAPI's built-in request validation errors use {"detail": [...]},
-        // not this app's custom {"error": {...}} envelope.
         message = body.detail
           .map((item) => {
             const field = item.loc?.slice(1).join(".") || "request";
@@ -72,6 +112,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       // ignore parse errors
     }
+
+    if (response.status === 401) {
+      message = "API key required or invalid. Open Settings and enter the operator key.";
+      code = code ?? "UNAUTHORIZED";
+    } else if (response.status >= 500 && !code) {
+      message = "Something went wrong. Please try again.";
+      code = "INTERNAL_ERROR";
+    } else if (response.status >= 400 && response.status < 500 && code === "VALIDATION_ERROR") {
+      message = "That link isn't valid — reset filters and try again.";
+    }
+
     throw new ApiRequestError(message, response.status, code);
   }
 
@@ -102,23 +153,51 @@ export async function fetchScoringConfig(): Promise<ScoringConfig> {
   return request<ScoringConfig>("/scoring-config");
 }
 
+export async function updateScoringConfig(body: {
+  weights: Record<string, number>;
+  bands: Array<{ name: string; min: number; max: number | null }>;
+  rescore?: boolean;
+}): Promise<ScoringConfig & { rescored?: number }> {
+  return request("/scoring-config", {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function detectClinicSignals(clinicId: string): Promise<unknown> {
+  return request(`/clinics/${encodeURIComponent(clinicId)}/signals:detect`, {
+    method: "POST",
+  });
+}
+
+export async function enrichClinic(clinicId: string, force = false): Promise<unknown> {
+  const qs = force ? "?force=true" : "";
+  return request(`/clinics/${encodeURIComponent(clinicId)}/enrich${qs}`, {
+    method: "POST",
+  });
+}
+
+export async function scoreClinic(clinicId: string): Promise<unknown> {
+  return request(`/clinics/${encodeURIComponent(clinicId)}/score`, {
+    method: "POST",
+  });
+}
+
 export function buildClinicListQuery(searchParams: URLSearchParams): ClinicListQuery {
-  const minScore = searchParams.get("min_score");
-  const maxScore = searchParams.get("max_score");
   const hasWebsite = searchParams.get("has_website");
 
   return {
     q: searchParams.get("q") ?? undefined,
     state: searchParams.get("state") ?? undefined,
     priority: (searchParams.get("priority") as ClinicListQuery["priority"]) ?? undefined,
-    min_score: minScore ? Number(minScore) : undefined,
-    max_score: maxScore ? Number(maxScore) : undefined,
+    min_score: parseOptionalNonNegInt(searchParams.get("min_score")),
+    max_score: parseOptionalNonNegInt(searchParams.get("max_score")),
     has_website:
       hasWebsite === "true" ? true : hasWebsite === "false" ? false : undefined,
     signal_type: searchParams.get("signal_type") ?? undefined,
     sort: searchParams.get("sort") ?? "-score",
-    page: Number(searchParams.get("page") ?? "1"),
-    page_size: Number(searchParams.get("page_size") ?? "20"),
+    page: parsePositiveInt(searchParams.get("page"), 1),
+    page_size: parsePositiveInt(searchParams.get("page_size"), 20),
   };
 }
 
@@ -131,8 +210,24 @@ export function clinicListQueryToSearchParams(query: ClinicListQuery): URLSearch
   if (query.max_score != null) params.set("max_score", String(query.max_score));
   if (query.has_website != null) params.set("has_website", String(query.has_website));
   if (query.signal_type) params.set("signal_type", query.signal_type);
-  if (query.sort) params.set("sort", query.sort);
+  if (query.sort && query.sort !== "-score") params.set("sort", query.sort);
   if (query.page && query.page > 1) params.set("page", String(query.page));
   if (query.page_size && query.page_size !== 20) params.set("page_size", String(query.page_size));
   return params;
+}
+
+export function userFacingFetchError(err: unknown): string {
+  if (err instanceof ApiRequestError) {
+    if (err.code === "NETWORK_ERROR" || err.status === 0) {
+      return "Can't reach the service. Check that the API is running.";
+    }
+    if (err.status >= 400 && err.status < 500) {
+      return err.message || "That link isn't valid — reset filters.";
+    }
+    if (err.status >= 500) {
+      return "Something went wrong. Please try again.";
+    }
+    return err.message;
+  }
+  return "Failed to load clinics";
 }

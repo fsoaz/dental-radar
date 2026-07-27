@@ -6,13 +6,17 @@ B2B sales-intelligence platform that ranks dental clinics by purchase propensity
 
 ```bash
 cp .env.example .env
+# Local compose defaults ALLOW_UNAUTHENTICATED=true; set API_KEY for key-gated writes
 docker compose up --build
 ```
 
-- API health: http://localhost:8000/api/v1/health
-- API docs: http://localhost:8000/docs
+- API health: http://localhost:8000/api/v1/health/ready
+- API docs: http://localhost:8000/docs (disabled when `APP_ENV=production`)
 - Dashboard: http://localhost:3000/clinics
+- Scoring settings: http://localhost:3000/settings/scoring
 - Postgres (host): `localhost:5433` when using Docker Compose
+
+> **Heads-up:** the dev stack publishes the API on `0.0.0.0:8000` with `ALLOW_UNAUTHENTICATED=true`, so its mutating routes are open to your whole network. If `GOOGLE_PLACES_API_KEY` or an LLM key is set, an unauthenticated `POST /clinics/discover` from any machine on the LAN spends real money. Bind to `127.0.0.1:8000:8000` in `docker-compose.yml`, or keep paid-provider keys unset unless you are ingesting.
 
 ## Local development (frontend)
 
@@ -124,7 +128,8 @@ See [`docs/runbooks/deploy.md`](docs/runbooks/deploy.md) and [`docs/runbooks/rol
 
 ```bash
 cp .env.production.example .env.production
-# Edit secrets (POSTGRES_PASSWORD, JWT_SECRET, public URLs)
+# Edit secrets (POSTGRES_PASSWORD, JWT_SECRET, API_KEY, NEXT_PUBLIC_API_URL, …)
+# Complete the security pre-flight in docs/runbooks/deploy.md
 
 ./scripts/deploy.sh              # deploy IMAGE_TAG=main
 ./scripts/rollback.sh sha-<tag>  # roll back to previous image
@@ -150,5 +155,6 @@ See [`docs/`](docs/) for the full documentation index — product requirements, 
 
 Quick links:
 - [docs/README.md](docs/README.md) — documentation index + pilot workflow
-- [docs/runbooks/deploy.md](docs/runbooks/deploy.md) — production deployment
+- [docs/execution/qa_report_2026-07-27.md](docs/execution/qa_report_2026-07-27.md) — MVP QA + post-fix verification
+- [docs/runbooks/deploy.md](docs/runbooks/deploy.md) — production deployment + security pre-flight
 - [docs/runbooks/rollback.md](docs/runbooks/rollback.md) — rollback procedures

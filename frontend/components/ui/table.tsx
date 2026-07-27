@@ -27,9 +27,10 @@ export function TableRow({ className, ...props }: React.HTMLAttributes<HTMLTable
   );
 }
 
-export function TableHead({ className, ...props }: React.ThHTMLAttributes<HTMLTableCellElement>) {
+export function TableHead({ className, scope = "col", ...props }: React.ThHTMLAttributes<HTMLTableCellElement>) {
   return (
     <th
+      scope={scope}
       className={cn(
         "h-12 px-4 text-left align-middle font-medium text-muted-foreground",
         className,
@@ -37,6 +38,10 @@ export function TableHead({ className, ...props }: React.ThHTMLAttributes<HTMLTa
       {...props}
     />
   );
+}
+
+export function TableCaption({ className, ...props }: React.HTMLAttributes<HTMLTableCaptionElement>) {
+  return <caption className={cn("mt-4 text-sm text-muted-foreground", className)} {...props} />;
 }
 
 export function TableCell({ className, ...props }: React.TdHTMLAttributes<HTMLTableCellElement>) {

@@ -15,5 +15,12 @@ class ScoringConfigRepository(Protocol):
         *,
         weights: dict[str, int],
         bands: list[dict],
+        commit: bool = True,
     ) -> ScoringConfig:
         """Create a new config version and mark it active."""
+
+    def commit(self) -> None:
+        """Commit the current transaction."""
+
+    def rollback(self) -> None:
+        """Roll back the current transaction."""

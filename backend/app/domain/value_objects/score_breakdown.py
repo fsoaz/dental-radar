@@ -17,7 +17,9 @@ class ScoreBreakdown:
         points: dict[str, int] = {}
         for signal in signals:
             signal_type = signal.type.value if hasattr(signal.type, "value") else str(signal.type)
-            points[signal_type] = weights.get(signal_type, signal.applied_weight)
+            # Config is the single source of truth — never fall back to stale
+            # detection-time weights when a key is absent from the active config.
+            points[signal_type] = weights.get(signal_type, 0)
         return cls(points_by_type=points)
 
     def validate(self) -> None:

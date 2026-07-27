@@ -2,7 +2,7 @@ from app.application.dto.clinic_dto import ClinicData
 from app.application.dto.enrichment_dto import ClinicAIInput, EnrichmentResult, LLMCompletion
 from app.application.dto.page_evidence import PageEvidence
 from app.domain.value_objects.address import Address
-from app.infrastructure.crawler.website_crawler import parse_page_evidence
+from app.infrastructure.crawler.website_crawler import WebsiteFetchError, parse_page_evidence
 
 
 class FakeClinicSource:
@@ -19,12 +19,19 @@ class FakeWebsiteCrawler:
     def __init__(self, pages: dict[str, str] | None = None) -> None:
         self.pages = pages or {}
         self.fetched: list[str] = []
+        self.failures: dict[str, str] = {}
 
     def set_page(self, url: str, html: str) -> None:
         self.pages[url] = html
+        self.failures.pop(url, None)
+
+    def fail(self, url: str, message: str = "DNS resolution failed") -> None:
+        self.failures[url] = message
 
     def fetch(self, url: str) -> PageEvidence:
         self.fetched.append(url)
+        if url in self.failures:
+            raise WebsiteFetchError(url, self.failures[url])
         html = self.pages.get(url, self.pages.get("*", "<html></html>"))
         return parse_page_evidence(url, html)
 

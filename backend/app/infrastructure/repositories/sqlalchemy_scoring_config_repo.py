@@ -20,6 +20,15 @@ def _model_to_config(model: ScoringConfigModel) -> ScoringConfig:
     )
 
 
+def _bands_equal(left: list[ScoreBand], right: list[dict]) -> bool:
+    if len(left) != len(right):
+        return False
+    for band, raw in zip(left, right, strict=True):
+        if band.name != raw["name"] or band.min != raw["min"] or band.max != raw.get("max"):
+            return False
+    return True
+
+
 class SqlAlchemyScoringConfigRepository(ScoringConfigRepository):
     def __init__(self, session: Session) -> None:
         self._session = session
@@ -38,6 +47,7 @@ class SqlAlchemyScoringConfigRepository(ScoringConfigRepository):
         *,
         weights: dict[str, int],
         bands: list[dict],
+        commit: bool = True,
     ) -> ScoringConfig:
         # Lock the active row for the duration of this transaction so a concurrent
         # PUT blocks here instead of racing to compute the same next_version and
@@ -50,6 +60,12 @@ class SqlAlchemyScoringConfigRepository(ScoringConfigRepository):
             ).scalar_one()
         except NoResultFound as exc:
             raise ScoringConfigConflictError from exc
+
+        current_config = _model_to_config(current)
+        if current_config.weights == weights and _bands_equal(current_config.bands, bands):
+            # No-op: avoid version inflation when payload is unchanged.
+            return current_config
+
         current.active = False
 
         next_version = current.version + 1
@@ -61,9 +77,19 @@ class SqlAlchemyScoringConfigRepository(ScoringConfigRepository):
         )
         self._session.add(new_config)
         try:
-            self._session.commit()
+            if commit:
+                self._session.commit()
+            else:
+                self._session.flush()
         except IntegrityError as exc:
             self._session.rollback()
             raise ScoringConfigConflictError from exc
-        self._session.refresh(new_config)
+        if commit:
+            self._session.refresh(new_config)
         return _model_to_config(new_config)
+
+    def commit(self) -> None:
+        self._session.commit()
+
+    def rollback(self) -> None:
+        self._session.rollback()

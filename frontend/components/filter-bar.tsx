@@ -16,10 +16,6 @@ import {
 import { buildClinicListQuery, clinicListQueryToSearchParams } from "@/lib/api";
 import { PRIORITY_OPTIONS, SIGNAL_TYPE_OPTIONS, type ClinicListQuery, type PriorityLevel } from "@/lib/types";
 
-interface FilterBarProps {
-  onChange?: (query: ClinicListQuery) => void;
-}
-
 type DraftFilters = {
   q: string;
   state: string;
@@ -28,6 +24,7 @@ type DraftFilters = {
   max_score: string;
   has_website: string;
   signal_type: string;
+  sort: string;
 };
 
 function draftFromQuery(initial: ClinicListQuery): DraftFilters {
@@ -39,10 +36,11 @@ function draftFromQuery(initial: ClinicListQuery): DraftFilters {
     max_score: initial.max_score?.toString() ?? "",
     has_website: initial.has_website == null ? "" : String(initial.has_website),
     signal_type: initial.signal_type ?? "",
+    sort: initial.sort ?? "-score",
   };
 }
 
-export function FilterBar({ onChange }: FilterBarProps) {
+export function FilterBar() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const searchParamsKey = searchParams.toString();
@@ -68,12 +66,11 @@ export function FilterBar({ onChange }: FilterBarProps) {
             ? false
             : undefined,
       signal_type: draft.signal_type || undefined,
-      sort: "-score",
+      sort: draft.sort || "-score",
       page: nextPage,
       page_size: 20,
     };
 
-    onChange?.(query);
     const params = clinicListQueryToSearchParams(query);
     router.push(`/clinics?${params.toString()}`);
   }
@@ -87,6 +84,7 @@ export function FilterBar({ onChange }: FilterBarProps) {
       max_score: "",
       has_website: "",
       signal_type: "",
+      sort: "-score",
     });
     router.push("/clinics");
   }
@@ -195,6 +193,20 @@ export function FilterBar({ onChange }: FilterBarProps) {
               {option.label}
             </SelectItem>
           ))}
+        </SelectContent>
+      </Select>
+
+      <Select
+        value={draft.sort || "-score"}
+        onValueChange={(value) => setDraft((current) => ({ ...current, sort: value }))}
+      >
+        <SelectTrigger aria-label="Sort order">
+          <SelectValue placeholder="Sort" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="-score">Score (high to low)</SelectItem>
+          <SelectItem value="score">Score (low to high)</SelectItem>
+          <SelectItem value="name">Name</SelectItem>
         </SelectContent>
       </Select>
 

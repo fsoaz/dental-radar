@@ -22,6 +22,14 @@ HIRING_KEYWORDS = (
     "join our team",
     "careers",
     "job opening",
+    # Portuguese (Lisbon pilot)
+    "estamos a recrutar",
+    "recrutamento",
+    "carreiras",
+    "junta-te à equipa",
+    "junta-te a nossa equipa",
+    "vaga de emprego",
+    "oferta de emprego",
 )
 
 ADVERTISING_MARKERS = (
@@ -43,6 +51,8 @@ QUALITY_MARKERS = (
     "nexhealth",
     "online scheduling",
     "book appointment",
+    "marcar consulta",
+    "agendar consulta",
 )
 
 HIGH_TICKET_KEYWORDS = (
@@ -54,6 +64,19 @@ HIGH_TICKET_KEYWORDS = (
     "veneers",
     "oral rehabilitation",
     "oral rehab",
+    # Portuguese
+    "implantes",
+    "implante dentário",
+    "implante dentario",
+    "facetas",
+    "facetas dentárias",
+    "facetas dentarias",
+    "alinhadores",
+    "alinhadores invisíveis",
+    "alinhadores invisiveis",
+    "ortodontia",
+    "reabilitação oral",
+    "reabilitacao oral",
 )
 
 MULTI_LOCATION_MARKERS = (
@@ -63,6 +86,12 @@ MULTI_LOCATION_MARKERS = (
     "find a location",
     "location 1",
     "location 2",
+    "as nossas clínicas",
+    "as nossas clinicas",
+    "várias localizações",
+    "varias localizacoes",
+    "outras clínicas",
+    "outras clinicas",
 )
 
 
@@ -112,7 +141,10 @@ class SignalDetectionService:
                     evidence=f"Found hiring keyword '{keyword}' on {evidence.url}",
                     confidence=0.85,
                 )
-        if any("career" in link or "jobs" in link for link in evidence.links):
+        if any(
+            "career" in link or "jobs" in link or "carreira" in link or "emprego" in link
+            for link in evidence.links
+        ):
             return DetectedSignal(
                 signal_type=SignalType.HIRING,
                 evidence=f"Found careers/jobs link on {evidence.url}",
@@ -146,10 +178,16 @@ class SignalDetectionService:
         branch_links = [
             link
             for link in evidence.links
-            if any(token in link.lower() for token in ("location", "branch", "office"))
+            if any(
+                token in link.lower()
+                for token in ("location", "branch", "office", "clinica", "clínica", "localiza")
+            )
         ]
         marker_hits = sum(1 for marker in MULTI_LOCATION_MARKERS if marker in haystack)
-        address_count = len(re.findall(r"\b\d{5}(?:-\d{4})?\b", evidence.text))
+        # US ZIP (12345 or 12345-6789) and Portuguese postal codes (1000-001).
+        us_zips = len(re.findall(r"\b\d{5}(?:-\d{4})?\b", evidence.text))
+        pt_postals = len(re.findall(r"\b\d{4}-\d{3}\b", evidence.text))
+        address_count = max(us_zips, pt_postals)
 
         return max(
             1,

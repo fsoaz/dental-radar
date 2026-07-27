@@ -19,4 +19,6 @@ class ScoringConfig:
         for band in self.bands:
             if total >= band.min and (band.max is None or total <= band.max):
                 return band.name
-        return self.bands[-1].name if self.bands else "COLD"
+        raise ValueError(
+            f"score {total} falls outside configured bands; bands must cover [0, ∞) without gaps"
+        )
