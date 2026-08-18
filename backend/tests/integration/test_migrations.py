@@ -12,6 +12,7 @@ def test_all_tables_exist(migrated_engine):
         "score",
         "enrichment",
         "scoring_config",
+        "rescore_job",
         "alembic_version",
     }
     assert expected.issubset(tables)

@@ -70,11 +70,23 @@ export interface ScoreBand {
   max: number | null;
 }
 
+export interface RescoreJob {
+  id: string;
+  config_version: number;
+  status: "queued" | "running" | "succeeded" | "failed";
+  rescored: number | null;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  message: string | null;
+}
+
 export interface ScoringConfig {
   version: number;
   active: boolean;
   weights: Record<string, number>;
   bands: ScoreBand[];
+  rescore_job?: RescoreJob | null;
 }
 
 export interface ApiErrorBody {

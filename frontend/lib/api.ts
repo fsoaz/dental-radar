@@ -4,6 +4,7 @@ import type {
   ClinicListQuery,
   ClinicListResponse,
   FastApiValidationErrorBody,
+  RescoreJob,
   ScoringConfig,
 } from "@/lib/types";
 
@@ -93,8 +94,6 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     } else if (response.status >= 500 && !code) {
       message = "Something went wrong. Please try again.";
       code = "INTERNAL_ERROR";
-    } else if (response.status >= 400 && response.status < 500 && code === "VALIDATION_ERROR") {
-      message = "That link isn't valid — reset filters and try again.";
     }
 
     throw new ApiRequestError(message, response.status, code);
@@ -131,11 +130,15 @@ export async function updateScoringConfig(body: {
   weights: Record<string, number>;
   bands: Array<{ name: string; min: number; max: number | null }>;
   rescore?: boolean;
-}): Promise<ScoringConfig & { rescored?: number }> {
+}): Promise<ScoringConfig> {
   return request("/scoring-config", {
     method: "PUT",
     body: JSON.stringify(body),
   });
+}
+
+export async function fetchRescoreJob(jobId: string): Promise<RescoreJob> {
+  return request<RescoreJob>(`/scoring-config/rescore-jobs/${encodeURIComponent(jobId)}`);
 }
 
 export async function detectClinicSignals(clinicId: string): Promise<unknown> {
@@ -196,6 +199,9 @@ export function userFacingFetchError(err: unknown): string {
       return "Can't reach the service. Check that the API is running.";
     }
     if (err.status >= 400 && err.status < 500) {
+      if (err.code === "VALIDATION_ERROR") {
+        return "That link isn't valid — reset filters and try again.";
+      }
       return err.message || "That link isn't valid — reset filters.";
     }
     if (err.status >= 500) {

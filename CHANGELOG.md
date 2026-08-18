@@ -9,6 +9,14 @@ Human-readable history of Dental Radar. Commit messages are not a substitute for
 - Versioned developer documentation: Diátaxis hub under `docs/`, getting-started tutorial, operator how-tos, API/CLI/environment/glossary reference, `CONTRIBUTING.md`, and this changelog. `docs/` is no longer gitignored.
 - Enforced gitleaks, `pip-audit`, `npm audit`, Dependabot, immutable Action pins, and a reproducible backend `uv.lock`.
 - Redis-backed rate limits shared across API replicas, with fail-closed behavior and readiness checks.
+- Durable Postgres-backed rescore jobs with a dedicated worker and status polling in scoring settings.
+- Accessible score/name table-header sorting and immediate scoring-band validation.
+
+### Fixed
+
+- Preserve endpoint-specific backend validation messages instead of rewriting scoring errors as clinic-filter guidance.
+- Drive score-ranked pagination from the score index and add indexed clinic-name ordering.
+- Run Alembic once through a migration service before API/worker startup rather than in every API replica.
 
 ### Security
 
@@ -16,6 +24,7 @@ Human-readable history of Dental Radar. Commit messages are not a substitute for
 - Removed unused `app_user` / JWT scaffolding through a reversible migration.
 - Development and production operator surfaces bind to loopback by default; local secret files are created with mode `600`.
 - Updated Next.js and affected transitive packages to clear the enforced High-severity dependency audit.
+- Added CSP, anti-framing, MIME-sniffing, referrer, and browser permissions headers to the frontend.
 
 ## 2026-07-27 — QA remediation (pilot with reservations)
 

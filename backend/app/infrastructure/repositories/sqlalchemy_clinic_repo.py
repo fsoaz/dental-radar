@@ -20,7 +20,6 @@ from app.infrastructure.db.mappers import (
 )
 from app.infrastructure.db.models import (
     ClinicModel,
-    EnrichmentModel,
     LocationModel,
     ScoreModel,
     SignalModel,
@@ -147,75 +146,139 @@ class SqlAlchemyClinicRepository(ClinicRepository):
         )
 
     def list_clinics(self, query: ClinicListQuery) -> ClinicListResult:
-        stmt = (
-            select(ClinicModel)
-            .outerjoin(ScoreModel, ScoreModel.clinic_id == ClinicModel.id)
-            .outerjoin(EnrichmentModel, EnrichmentModel.clinic_id == ClinicModel.id)
-            .options(
-                selectinload(ClinicModel.locations),
-                selectinload(ClinicModel.score),
-                selectinload(ClinicModel.enrichment),
-            )
-        )
+        def filtered_ids(*, scored: bool | None = None):
+            if scored is True:
+                stmt = select(ClinicModel.id).select_from(ScoreModel).join(ClinicModel)
+            else:
+                stmt = select(ClinicModel.id).select_from(ClinicModel)
+                if query.priority or query.min_score is not None or query.max_score is not None:
+                    stmt = stmt.join(ScoreModel, ScoreModel.clinic_id == ClinicModel.id)
+                if scored is False:
+                    stmt = stmt.where(~exists().where(ScoreModel.clinic_id == ClinicModel.id))
 
-        if query.q or query.state:
-            stmt = stmt.join(
-                LocationModel,
-                (LocationModel.clinic_id == ClinicModel.id) & LocationModel.is_primary.is_(True),
-            )
-
-        if query.q:
-            pattern = f"%{_escape_like(query.q)}%"
-            stmt = stmt.where(
-                or_(
-                    ClinicModel.name.ilike(pattern, escape="\\"),
-                    LocationModel.city.ilike(pattern, escape="\\"),
+            if query.q or query.state:
+                stmt = stmt.join(
+                    LocationModel,
+                    (LocationModel.clinic_id == ClinicModel.id)
+                    & LocationModel.is_primary.is_(True),
                 )
-            )
-
-        if query.state:
-            stmt = stmt.where(LocationModel.state.ilike(_escape_like(query.state), escape="\\"))
-
-        if query.priority:
-            stmt = stmt.where(ScoreModel.priority == query.priority.upper())
-
-        if query.min_score is not None:
-            stmt = stmt.where(ScoreModel.total >= query.min_score)
-
-        if query.max_score is not None:
-            stmt = stmt.where(ScoreModel.total <= query.max_score)
-
-        if query.has_website is True:
-            stmt = stmt.where(ClinicModel.website.is_not(None), ClinicModel.website != "")
-        elif query.has_website is False:
-            stmt = stmt.where(or_(ClinicModel.website.is_(None), ClinicModel.website == ""))
-
-        if query.signal_type:
-            stmt = stmt.where(
-                exists().where(
-                    SignalModel.clinic_id == ClinicModel.id,
-                    SignalModel.type == query.signal_type.upper(),
+            if query.q:
+                pattern = f"%{_escape_like(query.q)}%"
+                stmt = stmt.where(
+                    or_(
+                        ClinicModel.name.ilike(pattern, escape="\\"),
+                        LocationModel.city.ilike(pattern, escape="\\"),
+                    )
                 )
-            )
+            if query.state:
+                stmt = stmt.where(LocationModel.state.ilike(_escape_like(query.state), escape="\\"))
+            if query.priority:
+                stmt = stmt.where(ScoreModel.priority == query.priority.upper())
+            if query.min_score is not None:
+                stmt = stmt.where(ScoreModel.total >= query.min_score)
+            if query.max_score is not None:
+                stmt = stmt.where(ScoreModel.total <= query.max_score)
+            if query.has_website is True:
+                stmt = stmt.where(ClinicModel.website.is_not(None), ClinicModel.website != "")
+            elif query.has_website is False:
+                stmt = stmt.where(or_(ClinicModel.website.is_(None), ClinicModel.website == ""))
+            if query.signal_type:
+                stmt = stmt.where(
+                    exists().where(
+                        SignalModel.clinic_id == ClinicModel.id,
+                        SignalModel.type == query.signal_type.upper(),
+                    )
+                )
+            return stmt
 
-        count_query = select(func.count()).select_from(stmt.order_by(None).subquery())
-        total = self._session.execute(count_query).scalar_one()
-
-        if query.sort == "score":
-            order = ScoreModel.total.asc().nullsfirst()
-        elif query.sort == "name":
-            order = ClinicModel.name.asc()
-        else:
-            # Default and "-score"
-            order = ScoreModel.total.desc().nullslast()
-
+        all_ids = filtered_ids()
+        total = self._session.execute(
+            select(func.count()).select_from(all_ids.subquery())
+        ).scalar_one()
         offset = (query.page - 1) * query.page_size
-        clinic_models = (
-            self._session.execute(stmt.order_by(order).offset(offset).limit(query.page_size))
-            .scalars()
-            .unique()
-            .all()
-        )
+        selected_ids: list[UUID] = []
+
+        if query.sort == "name":
+            selected_ids = list(
+                self._session.execute(
+                    all_ids.order_by(ClinicModel.name.asc(), ClinicModel.id.asc())
+                    .offset(offset)
+                    .limit(query.page_size)
+                ).scalars()
+            )
+        else:
+            has_score_filters = bool(
+                query.priority or query.min_score is not None or query.max_score is not None
+            )
+            unscored_count = 0
+            if not has_score_filters:
+                unscored_count = self._session.execute(
+                    select(func.count()).select_from(filtered_ids(scored=False).subquery())
+                ).scalar_one()
+            scored_count = total - unscored_count
+
+            def append_ids(stmt, partition_offset: int, count: int) -> None:
+                if count <= 0:
+                    return
+                selected_ids.extend(
+                    self._session.execute(stmt.offset(partition_offset).limit(count)).scalars()
+                )
+
+            if query.sort == "score":
+                # NULLS FIRST: unscored clinics precede scored clinics.
+                unscored_take = max(0, min(query.page_size, unscored_count - offset))
+                append_ids(
+                    filtered_ids(scored=False).order_by(
+                        ClinicModel.name.asc(), ClinicModel.id.asc()
+                    ),
+                    min(offset, unscored_count),
+                    unscored_take,
+                )
+                remaining = query.page_size - len(selected_ids)
+                append_ids(
+                    filtered_ids(scored=True).order_by(
+                        ScoreModel.total.asc(), ClinicModel.id.asc()
+                    ),
+                    max(0, offset - unscored_count),
+                    remaining,
+                )
+            else:
+                # NULLS LAST: drive the ranked partition from ix_score_total.
+                scored_take = max(0, min(query.page_size, scored_count - offset))
+                append_ids(
+                    filtered_ids(scored=True).order_by(
+                        ScoreModel.total.desc(), ClinicModel.id.asc()
+                    ),
+                    min(offset, scored_count),
+                    scored_take,
+                )
+                remaining = query.page_size - len(selected_ids)
+                append_ids(
+                    filtered_ids(scored=False).order_by(
+                        ClinicModel.name.asc(), ClinicModel.id.asc()
+                    ),
+                    max(0, offset - scored_count),
+                    remaining,
+                )
+
+        if selected_ids:
+            loaded = (
+                self._session.execute(
+                    select(ClinicModel)
+                    .where(ClinicModel.id.in_(selected_ids))
+                    .options(
+                        selectinload(ClinicModel.locations),
+                        selectinload(ClinicModel.score),
+                        selectinload(ClinicModel.enrichment),
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            by_id = {model.id: model for model in loaded}
+            clinic_models = [by_id[clinic_id] for clinic_id in selected_ids]
+        else:
+            clinic_models = []
 
         items: list[ClinicListItem] = []
         for clinic_model in clinic_models:

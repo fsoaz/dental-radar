@@ -3,7 +3,7 @@
 Stories: US-G2. Sprint S7. Goal: repeatable releases + basic monitoring.
 
 ## Tasks
-- [x] Backend `Dockerfile` (multi-stage, run `alembic upgrade head` then start uvicorn).
+- [x] Backend `Dockerfile` (multi-stage, non-root, command-aware entrypoint); Compose runs Alembic through a one-shot migrator before API/worker startup.
 - [x] Frontend `Dockerfile` (Next.js build + run).
 - [x] Production `docker-compose` / deploy manifest (api, frontend, postgres, env/secrets).
 - [x] Secrets via env / secret store; no secrets in image or repo.
