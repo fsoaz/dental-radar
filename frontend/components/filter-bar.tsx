@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Search } from "lucide-react";
 
@@ -47,10 +47,12 @@ export function FilterBar() {
   const initial = buildClinicListQuery(searchParams);
 
   const [draft, setDraft] = useState<DraftFilters>(() => draftFromQuery(initial));
+  const [prevSearchParamsKey, setPrevSearchParamsKey] = useState(searchParamsKey);
 
-  useEffect(() => {
+  if (searchParamsKey !== prevSearchParamsKey) {
+    setPrevSearchParamsKey(searchParamsKey);
     setDraft(draftFromQuery(buildClinicListQuery(searchParams)));
-  }, [searchParamsKey, searchParams]);
+  }
 
   function applyFilters(nextPage = 1) {
     const query: ClinicListQuery = {
