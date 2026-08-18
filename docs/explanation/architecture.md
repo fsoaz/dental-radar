@@ -32,7 +32,7 @@ flowchart LR
   INFRA -->|enrichment| LLM
 ```
 
-**Style:** Clean Architecture + DDD-Lite + SOLID. Single deployable FastAPI service + a Next.js app + one Postgres. Background jobs run as CLI/worker commands invoked by cron (MVP keeps it simple — no message broker yet).
+**Style:** Clean Architecture + DDD-Lite + SOLID. The stack has a FastAPI API, a dedicated rescore worker using a durable Postgres job table, a Next.js app, Postgres, and Redis. Batch ingestion remains available through CLI commands; scoring-config rescores are queued and processed outside the request path.
 
 ### Dependency rule
 Dependencies point inward only: `Presentation → Application → Domain`; `Infrastructure → (implements) → Application/Domain ports`. Domain imports nothing from outer layers.
@@ -108,11 +108,6 @@ classDiagram
     +str model
     +str prompt_version
   }
-  class User {
-    +UUID id
-    +str email
-    +str role
-  }
   Clinic "1" --> "many" Location
   Clinic "1" --> "many" Signal
   Clinic "1" --> "1" Score
@@ -120,7 +115,7 @@ classDiagram
 ```
 
 ### Entities
-`Clinic` (aggregate root), `Location`, `Signal`, `Score`, `Enrichment`, `User`.
+`Clinic` (aggregate root), `Location`, `Signal`, `Score`, `Enrichment`, `ScoringConfig`, `RescoreJob`.
 
 ### Value Objects (immutable, no identity)
 - `Address` — street, city, state, postal_code, country, lat, lng.
@@ -165,7 +160,7 @@ classDiagram
 }
 ```
 
-`ScoringService.compute(signals, config)` → `Score`. Editing the active config via API (`PUT /api/v1/scoring-config`) and re-running scoring re-ranks all clinics — **no redeploy, no code change**. Optionally a YAML default seed (`infrastructure/config/scoring_defaults.yaml`) bootstraps the first row.
+`ScoringService.compute(signals, config)` → `Score`. Editing the active config via API (`PUT /api/v1/scoring-config`) and requesting `rescore=true` atomically creates a durable job. The worker processes jobs in version order and updates every score in one transaction — **no redeploy, no code change**. Optionally a YAML default seed (`infrastructure/config/scoring_defaults.yaml`) bootstraps the first row.
 
 ---
 
@@ -180,11 +175,7 @@ erDiagram
   CLINIC ||--|| SCORE : has
   CLINIC ||--|| ENRICHMENT : has
   SCORING_CONFIG ||..o{ SCORE : applied_by
-  USER {
-    uuid id PK
-    text email
-    text role
-  }
+  SCORING_CONFIG ||--o{ RESCORE_JOB : queues
   CLINIC {
     uuid id PK
     text place_id UK
@@ -248,12 +239,23 @@ erDiagram
     jsonb bands
     timestamptz created_at
   }
+  RESCORE_JOB {
+    uuid id PK
+    int config_version FK
+    text status
+    int attempts
+    int rescored
+    text error_message
+    timestamptz created_at
+    timestamptz started_at
+    timestamptz finished_at
+  }
 ```
 
 ### 4.2 Tables & relationships
 - `clinic` 1—N `location`; 1—N `signal`; 1—1 `score`; 1—1 `enrichment`.
 - `scoring_config` versioned; `score.config_version` references the config used.
-- `user` standalone (single operator role for MVP).
+- `rescore_job` stores durable, retryable work for a specific scoring-config version.
 
 ### 4.3 DDL sketch (Postgres)
 
@@ -271,6 +273,7 @@ CREATE TABLE clinic (
   created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+CREATE INDEX ix_clinic_name_id ON clinic(name, id);
 
 CREATE TABLE location (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -303,6 +306,20 @@ CREATE TABLE scoring_config (
 );
 CREATE UNIQUE INDEX uq_scoring_config_active ON scoring_config(active) WHERE active;
 
+CREATE TABLE rescore_job (
+  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  config_version INTEGER NOT NULL REFERENCES scoring_config(version),
+  status         TEXT NOT NULL DEFAULT 'queued'
+                   CHECK (status IN ('queued', 'running', 'succeeded', 'failed')),
+  attempts       INTEGER NOT NULL DEFAULT 0,
+  rescored       INTEGER,
+  error_message  TEXT,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  started_at     TIMESTAMPTZ,
+  finished_at    TIMESTAMPTZ
+);
+CREATE INDEX ix_rescore_job_status_created ON rescore_job(status, created_at);
+
 CREATE TABLE score (
   id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   clinic_id      UUID NOT NULL UNIQUE REFERENCES clinic(id) ON DELETE CASCADE,
@@ -328,7 +345,7 @@ CREATE TABLE enrichment (
 ```
 
 ### 4.4 Migrations
-**Alembic**. `alembic revision --autogenerate` per change; one initial migration creates all tables + seeds `scoring_config` v1. Migrations run on container start (`alembic upgrade head`) before API boots.
+**Alembic**. `alembic revision --autogenerate` per change; the initial migration creates all tables and seeds `scoring_config` v1. Compose runs `alembic upgrade head` once through the `migrate` service. API and worker containers start only after that service exits successfully, avoiding concurrent-replica migration races.
 
 ---
 
@@ -388,6 +405,7 @@ expansion_probability, explanation}
 Base path `/api/v1`. JSON. Operator `X-API-Key` on mutating/paid routes (JWT login planned post-MVP). Conventions in [standards/api_rules.md](../standards/api_rules.md). Curl examples: [reference/api.md](../reference/api.md).
 
 Pipeline POSTs (discover, detect, score, enrich) run **synchronously** and return **200**, not 202.
+`PUT /scoring-config` returns **200** for a config-only update or **202** with a durable job handle when `rescore=true`.
 
 | Method | Path | Purpose | Status |
 |--------|------|---------|--------|
@@ -402,8 +420,9 @@ Pipeline POSTs (discover, detect, score, enrich) run **synchronously** and retur
 | GET | `/clinics/{id}/signals` | List signals | ✅ |
 | POST | `/clinics/{id}/score` | (Re)compute score | ✅ (`X-API-Key`, **200**) |
 | POST | `/clinics/{id}/enrich` | Run AI enrichment (`?force=true` optional) | ✅ (`X-API-Key`, **200**) |
-| GET | `/scoring-config` | Get active config | ✅ |
-| PUT | `/scoring-config` | Update weights/bands (re-score on demand) | ✅ (`X-API-Key`) |
+| GET | `/scoring-config` | Get active config + latest rescore job | ✅ |
+| PUT | `/scoring-config` | Update weights/bands; optionally queue rescore | ✅ (`X-API-Key`, **200/202**) |
+| GET | `/scoring-config/rescore-jobs/{id}` | Poll durable rescore status | ✅ |
 
 OpenAPI UI: `/docs` in non-production. Disabled (404) when `APP_ENV=production`.
 
@@ -478,7 +497,7 @@ dental-radar/
 backend/
 ├── app/
 │   ├── domain/
-│   │   ├── entities/        clinic.py location.py signal.py score.py enrichment.py user.py
+│   │   ├── entities/        clinic, location, signal, score, enrichment, scoring config, rescore job
 │   │   ├── value_objects/   address.py signal_type.py priority.py score_breakdown.py
 │   │   ├── services/        scoring_service.py signal_detection_service.py
 │   │   └── repositories/    ports (interfaces): clinic_repo.py signal_repo.py ...
@@ -497,8 +516,9 @@ backend/
 │   ├── presentation/
 │   │   ├── middleware/      request_logging.py rate_limit.py
 │   │   └── api/             v1/ routers (clinics.py scoring_config.py health.py) schemas/ deps.py
+│   ├── workers/             durable rescore worker entry point
 │   └── main.py              FastAPI app factory + CORS + DI wiring
-├── scripts/                 docker-entrypoint.sh (migrate → uvicorn)
+├── scripts/                 command-aware docker-entrypoint.sh (uvicorn by default)
 ├── tests/                   unit/ integration/ api/
 ├── cli.py                   batch commands (discover/detect/score/enrich)
 ├── alembic.ini
@@ -536,9 +556,12 @@ frontend/
 Production stack: `docker-compose.prod.yml` + `.env.production`. How-tos: [deploy.md](../how-to/deploy.md), [rollback.md](../how-to/rollback.md).
 
 ### Container startup (API)
-1. `alembic upgrade head` (entrypoint)
-2. `uvicorn app.main:app` on port 8000
-3. Readiness probe: `GET /api/v1/health/ready` (DB `SELECT 1`)
+1. Postgres becomes healthy.
+2. The one-shot `migrate` service runs `alembic upgrade head` and exits successfully.
+3. API and rescore worker start; the API entrypoint runs only `uvicorn app.main:app` by default.
+4. Readiness probe: `GET /api/v1/health/ready` (Postgres and Redis).
+
+The worker polls the Postgres `rescore_job` table. A session-level advisory lock permits one active worker, jobs are claimed oldest-first with `FOR UPDATE SKIP LOCKED`, and orphaned `running` jobs return to `queued` after restart.
 
 ### Health probes
 | Endpoint | Use |

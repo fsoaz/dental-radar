@@ -1,9 +1,9 @@
 #!/bin/sh
 set -eu
 
-echo "Running database migrations..."
-alembic upgrade head
-echo "Migrations complete."
+if [ "$#" -gt 0 ]; then
+  exec "$@"
+fi
 
 # Trust X-Forwarded-* from nobody by default.
 #

@@ -29,10 +29,10 @@ Default weights and bands (seeded `scoring_config` v1):
 ## Option A — dashboard
 
 1. Open http://localhost:3000/settings/scoring.
-2. Edit weights and band bounds. Bands must start at `0`, be contiguous, and leave the last band unbounded (`max` empty).
-3. Save. The same-origin server proxy adds the operator key without exposing it to browser JavaScript, and the API writes a new active config version.
+2. Edit weights and band bounds. Bands must start at `0`, be contiguous, and leave the last band unbounded (`max` empty). The page shows gaps and overlaps immediately and disables saving until the values are valid.
+3. Choose **Save** to update only the config, or **Save & rescore** to queue a durable full rescore. The same-origin server proxy adds the operator key without exposing it to browser JavaScript.
 
-> **Note:** the settings page does not always re-score every clinic on save. If the list looks stale, run `uv run --locked dental-radar score --all` from `backend/` or send `rescore: true` in the API body below.
+The settings page reports queued/running state and polls until the worker reports how many clinics were updated. It resumes polling the active version's latest job after a page reload.
 
 ## Option B — API
 
@@ -42,7 +42,7 @@ Read the active config:
 curl -sS http://localhost:8000/api/v1/scoring-config
 ```
 
-Write a new version (returns **200**). `PUT /scoring-config` requires `X-API-Key` when `API_KEY` is set.
+Write a new version. This example returns **202** because it requests a rescore; use `rescore: false` for a config-only **200** response. `PUT /scoring-config` requires `X-API-Key` when `API_KEY` is set.
 
 ```bash
 curl -sS -X PUT http://localhost:8000/api/v1/scoring-config \
@@ -66,7 +66,13 @@ curl -sS -X PUT http://localhost:8000/api/v1/scoring-config \
   }'
 ```
 
-`rescore: true` recomputes every clinic against the new config in the same request. That path is synchronous (no job queue yet).
+`rescore: true` commits the config and job atomically, then returns immediately. Poll the returned job ID:
+
+```bash
+curl -sS http://localhost:8000/api/v1/scoring-config/rescore-jobs/<job-id>
+```
+
+The worker serializes jobs by config version. A failed full rescore is rolled back and retried up to three times; final failure details are in worker logs.
 
 A concurrent write returns **409** `SCORING_CONFIG_CONFLICT`. Retry.
 

@@ -44,6 +44,9 @@ class ClinicModel(Base):
     enrichment: Mapped["EnrichmentModel | None"] = relationship(back_populates="clinic")
 
 
+Index("ix_clinic_name_id", ClinicModel.name, ClinicModel.id)
+
+
 class LocationModel(Base):
     __tablename__ = "location"
     __table_args__ = (Index("ix_location_state_city", "state", "city"),)
@@ -99,6 +102,27 @@ class ScoringConfigModel(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+class RescoreJobModel(Base):
+    __tablename__ = "rescore_job"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    config_version: Mapped[int] = mapped_column(
+        Integer, ForeignKey("scoring_config.version"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(Text, nullable=False, default="queued")
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    rescored: Mapped[int | None] = mapped_column(Integer)
+    error_message: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+Index("ix_rescore_job_status_created", RescoreJobModel.status, RescoreJobModel.created_at)
 
 
 class ScoreModel(Base):

@@ -9,7 +9,7 @@
 - **Docs index:** [README.md](../README.md) (hub) · this folder is [internal](README.md)
 
 ## Now
-_QA P0/P1 defects and the 2026-08-17 security hardening are closed and verified. Focus: pilot with real clinic data behind network isolation; measure scoring quality._
+_QA P0/P1 defects, async rescore, index-driven sorting, and migration startup separation are closed and verified. Focus: pilot with real clinic data behind network isolation; measure scoring quality._
 
 ## Pilot checklist
 
@@ -26,10 +26,7 @@ _QA P0/P1 defects and the 2026-08-17 security hardening are closed and verified.
 - None for a network-isolated pilot. OpenRouter/LLM credits required for live enrich.
 
 ## Post-MVP / open from QA §9.5
-- Async rescore / job queue (P1-8)
-- Index-driven list sort (P2-15)
 - Multi-page / locale crawl depth (P2-19)
-- Migration init job before multi-replica (P3-23)
 - Crawl status fields; social URLs / services
 - Per-user authentication
 - Playwright E2E

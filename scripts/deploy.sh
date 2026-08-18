@@ -26,7 +26,9 @@ fi
 
 echo "Deploying Dental Radar (tag=${IMAGE_TAG})..."
 docker compose "${compose_args[@]}" pull api frontend
-docker compose "${compose_args[@]}" up -d
+docker compose "${compose_args[@]}" up -d postgres redis
+docker compose "${compose_args[@]}" run --rm migrate
+docker compose "${compose_args[@]}" up -d api worker frontend
 
 "$ROOT_DIR/scripts/wait-for-health.sh"
 echo "Deploy complete."

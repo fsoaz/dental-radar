@@ -1,4 +1,6 @@
+from datetime import datetime
 from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -38,6 +40,7 @@ class ScoringConfigResponse(BaseModel):
     active: bool
     weights: dict[str, int]
     bands: list[ScoreBandResponseSchema]
+    rescore_job: "RescoreJobResponse | None" = None
 
 
 class UpdateScoringConfigRequest(BaseModel):
@@ -98,4 +101,15 @@ class UpdateScoringConfigResponse(BaseModel):
     active: bool
     weights: dict[str, int]
     bands: list[ScoreBandResponseSchema]
-    rescored: int = 0
+    rescore_job: "RescoreJobResponse | None" = None
+
+
+class RescoreJobResponse(BaseModel):
+    id: UUID
+    config_version: int
+    status: Literal["queued", "running", "succeeded", "failed"]
+    rescored: int | None = None
+    created_at: datetime
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    message: str | None = None

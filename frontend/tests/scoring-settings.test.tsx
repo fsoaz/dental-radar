@@ -6,6 +6,7 @@ import { ScoringSettingsClient } from "@/components/scoring-settings-client";
 
 const fetchScoringConfig = vi.fn();
 const updateScoringConfig = vi.fn();
+const fetchRescoreJob = vi.fn();
 
 vi.mock("@/lib/api", () => ({
   ApiRequestError: class ApiRequestError extends Error {
@@ -18,6 +19,7 @@ vi.mock("@/lib/api", () => ({
     }
   },
   fetchScoringConfig: (...args: unknown[]) => fetchScoringConfig(...args),
+  fetchRescoreJob: (...args: unknown[]) => fetchRescoreJob(...args),
   updateScoringConfig: (...args: unknown[]) => updateScoringConfig(...args),
 }));
 
@@ -39,12 +41,24 @@ const sampleConfig = {
   ],
 };
 
+const queuedJob = {
+  id: "33333333-3333-4333-8333-333333333333",
+  config_version: 4,
+  status: "queued" as const,
+  rescored: null,
+  created_at: "2026-08-18T12:00:00Z",
+  started_at: null,
+  finished_at: null,
+  message: null,
+};
+
 describe("ScoringSettingsClient", () => {
   beforeEach(() => {
     fetchScoringConfig.mockReset();
     updateScoringConfig.mockReset();
+    fetchRescoreJob.mockReset();
     fetchScoringConfig.mockResolvedValue(sampleConfig);
-    updateScoringConfig.mockResolvedValue({ ...sampleConfig, version: 4, rescored: 12 });
+    updateScoringConfig.mockResolvedValue({ ...sampleConfig, version: 4 });
   });
 
   afterEach(() => {
@@ -60,6 +74,11 @@ describe("ScoringSettingsClient", () => {
   });
 
   it("saves config and optionally rescores", async () => {
+    updateScoringConfig.mockResolvedValue({
+      ...sampleConfig,
+      version: 4,
+      rescore_job: queuedJob,
+    });
     const user = userEvent.setup();
     render(<ScoringSettingsClient />);
     await screen.findByDisplayValue("25");
@@ -74,7 +93,8 @@ describe("ScoringSettingsClient", () => {
         }),
       );
     });
-    expect(await screen.findByText(/Saved version 4; rescored 12 clinics/)).toBeInTheDocument();
+    expect(await screen.findByText(/Saved version 4; rescore queued/)).toBeInTheDocument();
+    expect(screen.getByText(/Rescore queued for version 4/)).toBeInTheDocument();
   });
 
   it("surfaces load failures", async () => {
@@ -84,5 +104,18 @@ describe("ScoringSettingsClient", () => {
     render(<ScoringSettingsClient />);
 
     expect(await screen.findByRole("alert")).toHaveTextContent("boom");
+  });
+
+  it("blocks saves and explains non-contiguous bands", async () => {
+    const user = userEvent.setup();
+    render(<ScoringSettingsClient />);
+    await screen.findByDisplayValue("25");
+
+    const coldMax = screen.getByLabelText("COLD max");
+    await user.clear(coldMax);
+    await user.type(coldMax, "60");
+
+    expect(screen.getByRole("alert")).toHaveTextContent(/overlap/i);
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   });
 });

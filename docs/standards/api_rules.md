@@ -17,12 +17,14 @@ Conventions for the FastAPI backend. Endpoint catalog in [architecture.md → AP
 | Read | GET | 200 (404 if missing) |
 | Create | POST | 201 (Location header) |
 | Trigger job | POST | 202 (async) or 200 (sync) |
-| Update/replace | PUT | 200 |
+| Update/replace | PUT | 200, or 202 when it also queues async work |
 | Delete | DELETE | 204 |
 | Health (live) | GET | 200 |
 | Health (ready) | GET | 200 when DB answers `SELECT 1` |
 
 **MVP exception:** discover, detect, score, and enrich are synchronous and return **200**, not 201/202. There is no 201 Location for discovery (upsert by `place_id`).
+
+`PUT /scoring-config` returns **202** only when `rescore=true`; the response includes a durable `rescore_job` handle. Poll `GET /scoring-config/rescore-jobs/{id}` until `succeeded` or `failed`.
 
 - Validation error → **422** (`VALIDATION_ERROR` envelope, or FastAPI field errors in `details`).
 - Auth missing/invalid → **401** (`UNAUTHORIZED`); missing `API_KEY` config → **503** (`API_KEY_NOT_CONFIGURED`).

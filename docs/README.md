@@ -57,6 +57,7 @@ This hub is organized by what you need to do next.
 | Doc | Purpose |
 |-----|---------|
 | [current_task.md](internal/current_task.md) | Current focus / handoff |
+| [qa_report_2026-08-18.md](internal/qa_report_2026-08-18.md) | Current QA release call and post-fix verification |
 | [qa_report_2026-07-27.md](internal/qa_report_2026-07-27.md) | Historical QA release call (superseded where noted by later hardening) |
 | [roadmap.md](internal/roadmap.md) | Completed MVP phase plan |
 | [tasks/](internal/tasks/) | Archived phase checklists |
@@ -65,10 +66,7 @@ This hub is organized by what you need to do next.
 
 From QA §9.5 — not blocking a network-isolated pilot:
 
-- Async job queue for `rescore=true` / batch pipelines
-- Index-driven clinic list ordering
 - Multi-page / locale-aware signal crawl
-- Migration one-shot init job before multi-replica
 - Crawl status fields; social URLs / services
 - Per-user authentication — the server-side operator `X-API-Key` covers MVP mutating routes
 - Playwright E2E tests

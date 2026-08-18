@@ -36,7 +36,7 @@ If Redis is unavailable, limited requests fail closed with **503** `RATE_LIMIT_U
 
 ## Endpoints
 
-All mutating pipeline jobs below run **synchronously** and return **200**, not 202.
+Clinic discovery, detection, single-clinic scoring, and enrichment run synchronously and return **200**. A scoring-config update with `rescore=true` queues durable background work and returns **202**.
 
 ### Health
 
@@ -123,6 +123,12 @@ curl -sS http://localhost:8000/api/v1/scoring-config
 
 `PUT` body and `rescore`: [tune scoring](../how-to/tune-scoring.md). Concurrent write → **409** `SCORING_CONFIG_CONFLICT`.
 
+- `PUT /scoring-config` without rescoring returns **200**.
+- `PUT /scoring-config` with `rescore=true` returns **202** and a `rescore_job` object with a UUID and `queued` status.
+- `GET /scoring-config` includes the latest rescore job for the active version, so the dashboard can resume polling after a reload.
+- `GET /scoring-config/rescore-jobs/{job_id}` returns `queued`, `running`, `succeeded`, or `failed`; successful jobs include `rescored`.
+- Unknown job IDs return **404** `RESCORE_JOB_NOT_FOUND`. Failure text is intentionally generic; diagnostic detail stays in worker logs.
+
 ## Errors
 
 Envelope:
@@ -141,6 +147,7 @@ Envelope:
 |------|--------|------|
 | 401 | `UNAUTHORIZED` | Missing or wrong `X-API-Key` |
 | 404 | `CLINIC_NOT_FOUND` | Unknown clinic id |
+| 404 | `RESCORE_JOB_NOT_FOUND` | Unknown rescore job id |
 | 409 | `SCORING_CONFIG_CONFLICT` | Concurrent config write; retry |
 | 422 | `VALIDATION_ERROR` | Bad body or query (`min_score` > `max_score`, band gaps, …) |
 | 429 | `RATE_LIMITED` | Shared Redis limiter |

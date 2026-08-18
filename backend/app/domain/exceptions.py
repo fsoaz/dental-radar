@@ -43,3 +43,9 @@ class InvalidQueryError(Exception):
     def __init__(self, message: str) -> None:
         self.message = message
         super().__init__(message)
+
+
+class RescoreJobNotFoundError(Exception):
+    def __init__(self, job_id: str) -> None:
+        self.job_id = job_id
+        super().__init__(f"Rescore job {job_id} not found")

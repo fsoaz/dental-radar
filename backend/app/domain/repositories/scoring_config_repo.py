@@ -10,6 +10,9 @@ class ScoringConfigRepository(Protocol):
     def get_active_config(self) -> ScoringConfig:
         """Return the full active scoring configuration."""
 
+    def get_config(self, version: int) -> ScoringConfig:
+        """Return one scoring configuration version."""
+
     def update_active_config(
         self,
         *,
