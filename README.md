@@ -4,6 +4,8 @@ B2B sales-intelligence platform that ranks dental clinics by purchase propensity
 
 It answers one question: **which clinics should a salesperson contact first?**
 
+![Dental Radar dashboard: a ranked list of clinics with priority scores and levels from Cold to Immediate](docs/assets/dashboard.png)
+
 ## Install
 
 Prerequisites:
