@@ -6,7 +6,7 @@ services:
       POSTGRES_PASSWORD: dental_radar
       POSTGRES_DB: dental_radar
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -15,19 +15,28 @@ services:
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   api:
     build:
       context: ./backend
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
       DATABASE_URL: postgresql://dental_radar:dental_radar@postgres:5432/dental_radar
-      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
       API_KEY: ${API_KEY:-}
       # Local compose only — mutating routes stay open when API_KEY is empty.
       # Production compose must NOT set this (defaults fail closed).
       ALLOW_UNAUTHENTICATED: ${ALLOW_UNAUTHENTICATED:-true}
       RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-60}
+      REDIS_URL: redis://redis:6379/0
       RATE_LIMIT_TRUSTED_PROXIES: ${RATE_LIMIT_TRUSTED_PROXIES:-}
       FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-}
       GOOGLE_PLACES_API_KEY: ${GOOGLE_PLACES_API_KEY:-}
@@ -50,6 +59,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/api/v1/health/ready || exit 1"]
       interval: 15s
@@ -60,13 +71,11 @@ services:
   frontend:
     build:
       context: ./frontend
-      args:
-        NEXT_PUBLIC_API_URL: http://localhost:8000/api/v1
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8000/api/v1
       API_URL: http://api:8000/api/v1
+      API_KEY: ${API_KEY:-}
     depends_on:
       api:
         condition: service_healthy

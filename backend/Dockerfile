@@ -1,5 +1,7 @@
 FROM python:3.12-slim AS builder
 
+COPY --from=ghcr.io/astral-sh/uv:0.12.3 /uv /uvx /bin/
+
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -7,10 +9,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml ./
+COPY pyproject.toml uv.lock ./
 COPY app ./app
 COPY cli.py ./cli.py
-RUN pip install --no-cache-dir .
+RUN uv sync --locked --no-dev --no-editable --no-cache
 
 FROM python:3.12-slim AS runtime
 
@@ -23,7 +25,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN addgroup --system --gid 1001 app && adduser --system --uid 1001 --gid 1001 app
 
-COPY --from=builder /usr/local /usr/local
+COPY --from=builder /app/.venv /app/.venv
 COPY alembic.ini ./
 COPY app ./app
 COPY cli.py ./cli.py
@@ -32,6 +34,7 @@ RUN chmod +x /entrypoint.sh && chown -R app:app /app
 
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
+ENV PATH=/app/.venv/bin:$PATH
 ENV PORT=8000
 
 USER app

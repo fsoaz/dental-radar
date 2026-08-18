@@ -1,5 +1,7 @@
 import logging
 import uuid
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.encoders import jsonable_encoder
@@ -20,7 +22,7 @@ from app.domain.exceptions import (
 from app.infrastructure.config.settings import settings
 from app.infrastructure.logging_config import configure_logging
 from app.presentation.api.v1 import clinics, health, scoring_config
-from app.presentation.middleware.rate_limit import RateLimitMiddleware
+from app.presentation.middleware.rate_limit import RateLimitMiddleware, RedisRateLimitStore
 from app.presentation.middleware.request_logging import RequestLoggingMiddleware
 
 logger = logging.getLogger(__name__)
@@ -46,9 +48,20 @@ def create_app() -> FastAPI:
                 "API_KEY_NOT_CONFIGURED. Set API_KEY, or ALLOW_UNAUTHENTICATED=true "
                 "for local development only."
             )
+    rate_limit_store = RedisRateLimitStore(settings.redis_url)
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        app.state.rate_limit_store = rate_limit_store
+        try:
+            yield
+        finally:
+            await rate_limit_store.close()
+
     app = FastAPI(
         title="Dental Radar API",
         version="0.1.0",
+        lifespan=lifespan,
         docs_url=None if is_production else "/docs",
         redoc_url=None if is_production else "/redoc",
         openapi_url=None if is_production else "/openapi.json",
@@ -57,6 +70,7 @@ def create_app() -> FastAPI:
     app.add_middleware(RequestLoggingMiddleware)
     app.add_middleware(
         RateLimitMiddleware,
+        store=rate_limit_store,
         limit=settings.rate_limit_per_minute,
         window_seconds=60,
         trusted_proxies=settings.rate_limit_trusted_proxies,

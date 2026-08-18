@@ -7,6 +7,41 @@ on:
     branches: [main]
 
 jobs:
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Scan repository history for secrets
+        uses: gitleaks/gitleaks-action@dcedce43c6f43de0b836d1fe38946645c9c638dc # v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
+        with:
+          version: "0.12.3"
+
+      - name: Audit backend production dependencies
+        working-directory: backend
+        run: |
+          uv sync --locked --extra dev
+          uv export --quiet --locked --no-dev --no-emit-project --output-file /tmp/dental-radar-requirements.txt
+          uv run --locked pip-audit --requirement /tmp/dental-radar-requirements.txt
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Audit frontend dependencies
+        working-directory: frontend
+        run: |
+          npm ci
+          npm audit --audit-level=high
+
   backend:
     runs-on: ubuntu-latest
 
@@ -29,39 +64,39 @@ jobs:
       DATABASE_URL: postgresql://dental_radar:dental_radar@localhost:5432/dental_radar_test
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
         with:
-          python-version: "3.12"
+          version: "0.12.3"
 
       - name: Install dependencies
         working-directory: backend
-        run: pip install -e ".[dev]"
+        run: uv sync --locked --extra dev
 
       - name: Ruff lint
         working-directory: backend
-        run: ruff check .
+        run: uv run --locked ruff check .
 
       - name: Ruff format
         working-directory: backend
-        run: ruff format --check .
+        run: uv run --locked ruff format --check .
 
       - name: Run migrations
         working-directory: backend
-        run: alembic upgrade head
+        run: uv run --locked alembic upgrade head
 
       - name: Pytest
         working-directory: backend
-        run: pytest -v
+        run: uv run --locked pytest -v
 
   frontend:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
           cache: npm

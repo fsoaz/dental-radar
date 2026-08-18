@@ -1,6 +1,5 @@
 """Regression tests for QA report 2026-07-27 critical findings."""
 
-import time
 from pathlib import Path
 from uuid import uuid4
 
@@ -20,7 +19,11 @@ from app.infrastructure.repositories.sqlalchemy_scoring_config_repo import (
 from app.infrastructure.repositories.sqlalchemy_signal_repo import SqlAlchemySignalRepository
 from app.main import create_app
 from app.presentation.api.deps import get_db_session, get_update_scoring_config
-from app.presentation.middleware.rate_limit import RateLimitMiddleware, parse_trusted_proxies
+from app.presentation.middleware.rate_limit import (
+    RateLimitMiddleware,
+    RateLimitResult,
+    parse_trusted_proxies,
+)
 from tests.support.fakes import FakeClinicSource, FakeWebsiteCrawler, make_clinic_data
 
 HIRING_HTML = "<html><body>We are hiring a receptionist</body></html>"
@@ -281,12 +284,34 @@ def test_p3_21_noop_config_keeps_version(scoring_stack, db_session):
 # --- Rate limiter: X-Forwarded-For spoofing + unbounded memory (post-fix review) ---
 
 
-def _rate_limited_app(**middleware_kwargs) -> FastAPI:
+class FakeRateLimitStore:
+    def __init__(self, *, failing: bool = False) -> None:
+        self.counts: dict[str, int] = {}
+        self.failing = failing
+
+    async def increment(self, key: str, window_seconds: int) -> RateLimitResult:
+        if self.failing:
+            raise ConnectionError("redis unavailable")
+        self.counts[key] = self.counts.get(key, 0) + 1
+        return RateLimitResult(self.counts[key], window_seconds)
+
+    async def ping(self) -> None:
+        return None
+
+    async def close(self) -> None:
+        return None
+
+
+def _rate_limited_app(*, store: FakeRateLimitStore | None = None, **middleware_kwargs) -> FastAPI:
     app = FastAPI()
-    app.add_middleware(RateLimitMiddleware, **middleware_kwargs)
+    app.add_middleware(
+        RateLimitMiddleware,
+        store=store or FakeRateLimitStore(),
+        **middleware_kwargs,
+    )
 
     @app.post("/api/v1/clinics/discover")
-    def _discover() -> dict:
+    async def _discover() -> dict:
         return {"ok": True}
 
     return app
@@ -342,21 +367,32 @@ def test_rate_limit_honours_forwarded_for_from_trusted_proxy():
         )
 
 
-def test_rate_limit_tracked_keys_are_bounded():
-    """Bucket count must not grow without limit as client addresses vary."""
-    limiter = RateLimitMiddleware(
-        app=None,
-        limit=100,
-        window_seconds=60,
-        trusted_proxies="203.0.113.10",
-        max_tracked_keys=25,
-    )
-    now = time.monotonic()
-    for index in range(500):
-        limiter._hits[f"198.51.100.{index}:/api/v1/clinics/discover"].append(now)
-    limiter._prune(now)
+def test_rate_limit_is_shared_across_app_instances():
+    store = FakeRateLimitStore()
+    first_app = _rate_limited_app(store=store, limit=3, window_seconds=60)
+    second_app = _rate_limited_app(store=store, limit=3, window_seconds=60)
 
-    assert len(limiter._hits) <= 25
+    with (
+        TestClient(first_app, client=("203.0.113.10", 5555)) as first_client,
+        TestClient(second_app, client=("203.0.113.10", 5555)) as second_client,
+    ):
+        assert first_client.post("/api/v1/clinics/discover").status_code == 200
+        assert second_client.post("/api/v1/clinics/discover").status_code == 200
+        assert first_client.post("/api/v1/clinics/discover").status_code == 200
+        blocked = second_client.post("/api/v1/clinics/discover")
+
+    assert blocked.status_code == 429
+    assert blocked.headers["Retry-After"] == "60"
+
+
+def test_rate_limit_fails_closed_when_store_is_unavailable():
+    app = _rate_limited_app(store=FakeRateLimitStore(failing=True), limit=3)
+
+    with TestClient(app) as api_client:
+        response = api_client.post("/api/v1/clinics/discover")
+
+    assert response.status_code == 503
+    assert response.json()["error"]["code"] == "RATE_LIMIT_UNAVAILABLE"
 
 
 def test_parse_trusted_proxies_ignores_garbage():

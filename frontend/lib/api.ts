@@ -19,30 +19,8 @@ export class ApiRequestError extends Error {
   }
 }
 
-const API_KEY_STORAGE = "dental_radar_api_key";
-
-export function getStoredApiKey(): string {
-  if (typeof window === "undefined") return "";
-  return window.localStorage.getItem(API_KEY_STORAGE) ?? "";
-}
-
-export function setStoredApiKey(value: string): void {
-  if (typeof window === "undefined") return;
-  if (value) window.localStorage.setItem(API_KEY_STORAGE, value);
-  else window.localStorage.removeItem(API_KEY_STORAGE);
-}
-
 export function getApiBaseUrl(): string {
-  // Browser: NEXT_PUBLIC_* is inlined at build time. Prefer an explicit public URL;
-  // fall back to same-origin so a reverse-proxied deploy works without rebuild.
-  if (typeof window === "undefined") {
-    return (
-      process.env.API_URL ??
-      process.env.NEXT_PUBLIC_API_URL ??
-      "http://localhost:8000/api/v1"
-    );
-  }
-  return process.env.NEXT_PUBLIC_API_URL || "/api/v1";
+  return "/api/backend";
 }
 
 function buildQuery(params: Record<string, string | number | boolean | undefined>): string {
@@ -73,12 +51,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     ...(init?.headers as Record<string, string> | undefined),
   };
   const method = (init?.method ?? "GET").toUpperCase();
-  if (method !== "GET" && method !== "HEAD") {
-    const apiKey = getStoredApiKey();
-    if (apiKey) headers["X-API-Key"] = apiKey;
-    if (init?.body && !headers["Content-Type"]) {
-      headers["Content-Type"] = "application/json";
-    }
+  if (method !== "GET" && method !== "HEAD" && init?.body && !headers["Content-Type"]) {
+    headers["Content-Type"] = "application/json";
   }
 
   let response: Response;
@@ -114,7 +88,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
 
     if (response.status === 401) {
-      message = "API key required or invalid. Open Settings and enter the operator key.";
+      message = "Operator authorization is unavailable. Contact the deployment administrator.";
       code = code ?? "UNAUTHORIZED";
     } else if (response.status >= 500 && !code) {
       message = "Something went wrong. Please try again.";

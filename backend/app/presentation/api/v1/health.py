@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -19,17 +19,27 @@ def liveness_check() -> HealthResponse:
 
 
 @router.get("/health/ready", response_model=HealthResponse)
-def readiness_check(db: Session = Depends(get_db_session)) -> HealthResponse:
-    """Database reachable — used after migrations before accepting traffic."""
-    db.execute(text("SELECT 1"))
+async def readiness_check(
+    request: Request, response: Response, db: Session = Depends(get_db_session)
+) -> HealthResponse:
+    """Database and Redis reachable — used before accepting traffic."""
+    try:
+        db.execute(text("SELECT 1"))
+        await request.app.state.rate_limit_store.ping()
+    except Exception:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        return HealthResponse(status="degraded")
     return HealthResponse(status="ok")
 
 
 @router.get("/health", response_model=HealthResponse)
-def health_check(response: Response, db: Session = Depends(get_db_session)) -> HealthResponse:
+async def health_check(
+    request: Request, response: Response, db: Session = Depends(get_db_session)
+) -> HealthResponse:
     """Backward-compatible readiness check."""
     try:
         db.execute(text("SELECT 1"))
+        await request.app.state.rate_limit_store.ping()
     except Exception:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
         return HealthResponse(status="degraded")

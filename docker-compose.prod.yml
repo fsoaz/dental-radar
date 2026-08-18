@@ -20,6 +20,16 @@ services:
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   api:
     image: ${API_IMAGE:-ghcr.io/${GITHUB_REPOSITORY:-local/dental-radar}/api:${IMAGE_TAG:-main}}
     build:
@@ -27,11 +37,11 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-dental_radar}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-dental_radar}
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       API_KEY: ${API_KEY:?API_KEY is required}
       # Never enable in production. Empty API_KEY without this fails closed (503).
       ALLOW_UNAUTHENTICATED: "false"
       RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-30}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       RATE_LIMIT_TRUSTED_PROXIES: ${RATE_LIMIT_TRUSTED_PROXIES:-}
       GOOGLE_PLACES_API_KEY: ${GOOGLE_PLACES_API_KEY:-}
       PLACES_MAX_PAGES: ${PLACES_MAX_PAGES:-3}
@@ -58,6 +68,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/api/v1/health/ready || exit 1"]
       interval: 15s
@@ -69,15 +81,14 @@ services:
     image: ${FRONTEND_IMAGE:-ghcr.io/${GITHUB_REPOSITORY:-local/dental-radar}/frontend:${IMAGE_TAG:-main}}
     build:
       context: ./frontend
-      args:
-        # Must be the public browser-reachable API URL. No localhost default —
-        # a missing value fails the build loudly instead of shipping a broken UI.
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?NEXT_PUBLIC_API_URL is required}
     restart: unless-stopped
     environment:
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?NEXT_PUBLIC_API_URL is required}
+      API_URL: http://api:8000/api/v1
+      API_KEY: ${API_KEY:?API_KEY is required}
     ports:
-      - "${FRONTEND_PORT:-3000}:3000"
+      # The frontend BFF is the operator authorization boundary. Keep it behind
+      # a trusted reverse proxy or explicitly override only on an isolated network.
+      - "${FRONTEND_BIND:-127.0.0.1}:${FRONTEND_PORT:-3000}:3000"
     depends_on:
       api:
         condition: service_healthy

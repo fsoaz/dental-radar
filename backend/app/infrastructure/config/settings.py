@@ -10,13 +10,13 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     database_url: str = "postgresql://dental_radar:dental_radar@localhost:5432/dental_radar"
-    jwt_secret: str = "change-me-in-production"
     api_key: str = ""
     # Escape hatch for local/test only. When False (default), an empty API_KEY
     # rejects mutating routes with 503 — auth fails closed even if APP_ENV is
     # left at its development default.
     allow_unauthenticated: bool = False
     rate_limit_per_minute: int = 30
+    redis_url: str = "redis://localhost:6379/0"
     # Comma-separated proxy IPs/CIDRs whose X-Forwarded-For may be trusted for
     # rate-limit client identification. Empty means trust none (use peer IP).
     rate_limit_trusted_proxies: str = ""

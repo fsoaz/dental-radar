@@ -152,15 +152,3 @@ class EnrichmentModel(Base):
     )
 
     clinic: Mapped["ClinicModel"] = relationship(back_populates="enrichment")
-
-
-class AppUserModel(Base):
-    __tablename__ = "app_user"
-
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    email: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
-    password_hash: Mapped[str] = mapped_column(Text, nullable=False)
-    role: Mapped[str] = mapped_column(Text, nullable=False, default="operator")
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )

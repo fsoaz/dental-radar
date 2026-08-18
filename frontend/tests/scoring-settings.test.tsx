@@ -6,8 +6,6 @@ import { ScoringSettingsClient } from "@/components/scoring-settings-client";
 
 const fetchScoringConfig = vi.fn();
 const updateScoringConfig = vi.fn();
-const getStoredApiKey = vi.fn(() => "");
-const setStoredApiKey = vi.fn();
 
 vi.mock("@/lib/api", () => ({
   ApiRequestError: class ApiRequestError extends Error {
@@ -21,8 +19,6 @@ vi.mock("@/lib/api", () => ({
   },
   fetchScoringConfig: (...args: unknown[]) => fetchScoringConfig(...args),
   updateScoringConfig: (...args: unknown[]) => updateScoringConfig(...args),
-  getStoredApiKey: () => getStoredApiKey(),
-  setStoredApiKey: (value: string) => setStoredApiKey(value),
 }));
 
 const sampleConfig = {
@@ -47,9 +43,6 @@ describe("ScoringSettingsClient", () => {
   beforeEach(() => {
     fetchScoringConfig.mockReset();
     updateScoringConfig.mockReset();
-    getStoredApiKey.mockReset();
-    setStoredApiKey.mockReset();
-    getStoredApiKey.mockReturnValue("");
     fetchScoringConfig.mockResolvedValue(sampleConfig);
     updateScoringConfig.mockResolvedValue({ ...sampleConfig, version: 4, rescored: 12 });
   });
@@ -66,25 +59,11 @@ describe("ScoringSettingsClient", () => {
     expect(fetchScoringConfig).toHaveBeenCalledTimes(1);
   });
 
-  it("persists the operator API key locally", async () => {
-    const user = userEvent.setup();
-    render(<ScoringSettingsClient />);
-    await screen.findByDisplayValue("25");
-
-    await user.type(screen.getByLabelText("API key"), "operator-secret");
-    await user.click(screen.getByRole("button", { name: "Save key" }));
-
-    expect(setStoredApiKey).toHaveBeenCalledWith("operator-secret");
-    expect(screen.getByText("API key saved for this browser.")).toBeInTheDocument();
-  });
-
   it("saves config and optionally rescores", async () => {
     const user = userEvent.setup();
     render(<ScoringSettingsClient />);
     await screen.findByDisplayValue("25");
 
-    await user.clear(screen.getByLabelText("API key"));
-    await user.type(screen.getByLabelText("API key"), "k");
     await user.click(screen.getByRole("button", { name: "Save & rescore" }));
 
     await waitFor(() => {
@@ -95,7 +74,6 @@ describe("ScoringSettingsClient", () => {
         }),
       );
     });
-    expect(setStoredApiKey).toHaveBeenCalledWith("k");
     expect(await screen.findByText(/Saved version 4; rescored 12 clinics/)).toBeInTheDocument();
   });
 

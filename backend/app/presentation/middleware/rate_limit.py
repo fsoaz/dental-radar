@@ -1,17 +1,20 @@
-"""Simple in-memory per-IP rate limiter for expensive mutating routes."""
+"""Redis-backed per-client rate limiting for expensive mutating routes."""
 
 from __future__ import annotations
 
+import hashlib
 import ipaddress
-import time
-from collections import defaultdict, deque
-from threading import Lock
+import logging
+from dataclasses import dataclass
+from typing import Protocol
 
+from redis.asyncio import Redis
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
-# Paths that hit billed third parties or rewrite business logic.
+logger = logging.getLogger(__name__)
+
 RATE_LIMITED_PREFIXES = (
     "/api/v1/clinics/discover",
     "/api/v1/scoring-config",
@@ -21,13 +24,53 @@ RATE_LIMITED_SUFFIXES = (
     "/enrich",
 )
 
-# Upper bound on distinct buckets held in memory. Keys derive from client
-# addresses, so without a cap a caller cycling addresses grows this without end.
-DEFAULT_MAX_TRACKED_KEYS = 10_000
+_INCREMENT_SCRIPT = """
+local count = redis.call('INCR', KEYS[1])
+if count == 1 then
+  redis.call('PEXPIRE', KEYS[1], ARGV[1])
+end
+local ttl = redis.call('PTTL', KEYS[1])
+return {count, ttl}
+"""
+
+
+@dataclass(frozen=True)
+class RateLimitResult:
+    count: int
+    retry_after_seconds: int
+
+
+class RateLimitStore(Protocol):
+    async def increment(self, key: str, window_seconds: int) -> RateLimitResult: ...
+
+    async def ping(self) -> None: ...
+
+    async def close(self) -> None: ...
+
+
+class RedisRateLimitStore:
+    def __init__(self, redis_url: str) -> None:
+        self._redis = Redis.from_url(redis_url, decode_responses=False)
+
+    async def increment(self, key: str, window_seconds: int) -> RateLimitResult:
+        count, ttl_ms = await self._redis.eval(
+            _INCREMENT_SCRIPT,
+            1,
+            key,
+            window_seconds * 1000,
+        )
+        retry_after = max(1, (int(ttl_ms) + 999) // 1000)
+        return RateLimitResult(count=int(count), retry_after_seconds=retry_after)
+
+    async def ping(self) -> None:
+        await self._redis.ping()
+
+    async def close(self) -> None:
+        await self._redis.aclose()
 
 
 def parse_trusted_proxies(raw: str) -> list[ipaddress.IPv4Network | ipaddress.IPv6Network]:
-    """Parse a comma-separated list of proxy IPs/CIDRs. Unparsable entries are dropped."""
+    """Parse a comma-separated list of proxy IPs/CIDRs; ignore invalid entries."""
     networks: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = []
     for entry in raw.split(","):
         candidate = entry.strip()
@@ -45,25 +88,21 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self,
         app,
         *,
+        store: RateLimitStore,
         limit: int = 30,
         window_seconds: int = 60,
         trusted_proxies: str = "",
-        max_tracked_keys: int = DEFAULT_MAX_TRACKED_KEYS,
     ) -> None:
         super().__init__(app)
+        self._store = store
         self._limit = max(1, limit)
         self._window = max(1, window_seconds)
         self._trusted = parse_trusted_proxies(trusted_proxies)
-        self._max_keys = max(1, max_tracked_keys)
-        self._hits: dict[str, deque[float]] = defaultdict(deque)
-        self._last_prune = time.monotonic()
-        self._lock = Lock()
 
     def _is_limited(self, path: str, method: str) -> bool:
-        if method.upper() == "GET":
+        if method.upper() in {"GET", "HEAD"}:
             return False
         if any(path.startswith(prefix) for prefix in RATE_LIMITED_PREFIXES):
-            # GET /scoring-config is excluded above; PUT is limited.
             return True
         return any(path.endswith(suffix) for suffix in RATE_LIMITED_SUFFIXES)
 
@@ -77,15 +116,6 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return any(ip in network for network in self._trusted)
 
     def _client_key(self, request: Request) -> str:
-        """Resolve the caller address, honouring X-Forwarded-For only from trusted proxies.
-
-        X-Forwarded-For is attacker-controlled on any request that does not
-        arrive through our own proxy, so keying buckets on it unconditionally
-        lets a caller reset their own limit by rotating the header. It is read
-        only when the immediate peer is a configured proxy; the chain is then
-        walked right-to-left and the first address no trusted proxy vouched for
-        wins, because leftmost entries are the ones a client can forge.
-        """
         peer = request.client.host if request.client else None
         if peer is None:
             return "unknown"
@@ -103,51 +133,42 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 return hop
         return peer
 
-    def _prune(self, now: float) -> None:
-        """Drop buckets idle for a full window, then enforce the hard cap.
-
-        Caller must hold the lock.
-        """
-        stale = [
-            key for key, hits in self._hits.items() if not hits or now - hits[-1] >= self._window
-        ]
-        for key in stale:
-            del self._hits[key]
-
-        overflow = len(self._hits) - self._max_keys
-        if overflow > 0:
-            oldest = sorted(self._hits.items(), key=lambda item: item[1][-1])
-            for key, _ in oldest[:overflow]:
-                del self._hits[key]
-
-        self._last_prune = now
+    @staticmethod
+    def _bucket_key(client: str, path: str) -> str:
+        digest = hashlib.sha256(f"{client}:{path}".encode()).hexdigest()
+        return f"dental-radar:rate-limit:{digest}"
 
     async def dispatch(self, request: Request, call_next) -> Response:
         path = request.url.path
         if not self._is_limited(path, request.method):
             return await call_next(request)
 
-        key = f"{self._client_key(request)}:{path}"
-        now = time.monotonic()
-        with self._lock:
-            if now - self._last_prune >= self._window or len(self._hits) >= self._max_keys:
-                self._prune(now)
+        key = self._bucket_key(self._client_key(request), path)
+        try:
+            result = await self._store.increment(key, self._window)
+        except Exception:
+            logger.exception("Redis rate limiter unavailable")
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "error": {
+                        "code": "RATE_LIMIT_UNAVAILABLE",
+                        "message": "Request cost controls are temporarily unavailable",
+                        "details": None,
+                    }
+                },
+            )
 
-            bucket = self._hits[key]
-            while bucket and now - bucket[0] >= self._window:
-                bucket.popleft()
-            if len(bucket) >= self._limit:
-                return JSONResponse(
-                    status_code=429,
-                    content={
-                        "error": {
-                            "code": "RATE_LIMITED",
-                            "message": "Too many requests; try again later",
-                            "details": {"limit": self._limit, "window_seconds": self._window},
-                        }
-                    },
-                    headers={"Retry-After": str(self._window)},
-                )
-            bucket.append(now)
-
+        if result.count > self._limit:
+            return JSONResponse(
+                status_code=429,
+                content={
+                    "error": {
+                        "code": "RATE_LIMITED",
+                        "message": "Too many requests; try again later",
+                        "details": {"limit": self._limit, "window_seconds": self._window},
+                    }
+                },
+                headers={"Retry-After": str(result.retry_after_seconds)},
+            )
         return await call_next(request)

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.infrastructure.config.settings import settings
 from app.main import create_app
+from app.presentation.middleware.rate_limit import RateLimitResult, RedisRateLimitStore
 
 
 @pytest.fixture(autouse=True)
@@ -21,6 +22,22 @@ def _allow_unauthenticated_in_tests(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     monkeypatch.setattr(settings, "allow_unauthenticated", True)
     monkeypatch.setattr(settings, "api_key", "")
+
+    async def increment(self, key: str, window_seconds: int) -> RateLimitResult:
+        counts = getattr(self, "_test_counts", {})
+        counts[key] = counts.get(key, 0) + 1
+        self._test_counts = counts
+        return RateLimitResult(count=counts[key], retry_after_seconds=window_seconds)
+
+    async def ping(self) -> None:
+        return None
+
+    async def close(self) -> None:
+        return None
+
+    monkeypatch.setattr(RedisRateLimitStore, "increment", increment)
+    monkeypatch.setattr(RedisRateLimitStore, "ping", ping)
+    monkeypatch.setattr(RedisRateLimitStore, "close", close)
 
 
 @pytest.fixture(scope="session")

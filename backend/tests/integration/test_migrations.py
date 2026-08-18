@@ -12,10 +12,10 @@ def test_all_tables_exist(migrated_engine):
         "score",
         "enrichment",
         "scoring_config",
-        "app_user",
         "alembic_version",
     }
     assert expected.issubset(tables)
+    assert "app_user" not in tables
 
 
 def test_scoring_config_v1_seeded(migrated_engine):

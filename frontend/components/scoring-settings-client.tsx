@@ -8,8 +8,6 @@ import { Input } from "@/components/ui/input";
 import {
   ApiRequestError,
   fetchScoringConfig,
-  getStoredApiKey,
-  setStoredApiKey,
   updateScoringConfig,
 } from "@/lib/api";
 import type { PriorityLevel, ScoreBand, ScoringConfig } from "@/lib/types";
@@ -30,7 +28,6 @@ const DEFAULT_BANDS: ScoreBand[] = [
 ];
 
 export function ScoringSettingsClient() {
-  const [apiKey, setApiKey] = useState("");
   const [weights, setWeights] = useState<Record<string, number>>({});
   const [bands, setBands] = useState<ScoreBand[]>(DEFAULT_BANDS);
   const [version, setVersion] = useState<number | null>(null);
@@ -40,7 +37,6 @@ export function ScoringSettingsClient() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setApiKey(getStoredApiKey());
     let cancelled = false;
 
     async function load() {
@@ -74,16 +70,10 @@ export function ScoringSettingsClient() {
     );
   }
 
-  function persistApiKey() {
-    setStoredApiKey(apiKey.trim());
-    setMessage("API key saved for this browser.");
-  }
-
   async function save(rescore: boolean) {
     setSaving(true);
     setMessage(null);
     setError(null);
-    setStoredApiKey(apiKey.trim());
     try {
       const result = await updateScoringConfig({
         weights: Object.fromEntries(
@@ -122,34 +112,10 @@ export function ScoringSettingsClient() {
       <div>
         <h1 className="text-3xl font-semibold tracking-tight">Scoring settings</h1>
         <p className="mt-2 text-muted-foreground">
-          Tune signal weights and priority bands. Requires the operator API key when the API is
-          locked down.
+          Tune signal weights and priority bands. Write access is provided by the operator-only
+          application server.
         </p>
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Operator API key</CardTitle>
-          <CardDescription>
-            Stored only in this browser&apos;s local storage and sent as{" "}
-            <code>X-API-Key</code> on write requests.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          <Input
-            aria-label="API key"
-            type="password"
-            autoComplete="off"
-            className="max-w-md"
-            value={apiKey}
-            onChange={(event) => setApiKey(event.target.value)}
-            placeholder="Paste API_KEY"
-          />
-          <Button type="button" variant="outline" onClick={persistApiKey}>
-            Save key
-          </Button>
-        </CardContent>
-      </Card>
 
       <Card>
         <CardHeader>
