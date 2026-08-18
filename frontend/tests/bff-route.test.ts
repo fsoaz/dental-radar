@@ -8,7 +8,7 @@ const context = (path: string[]) => ({ params: Promise.resolve({ path }) });
 describe("backend BFF route", () => {
   beforeEach(() => {
     process.env.API_URL = "http://api:8000/api/v1";
-    process.env.API_KEY = "server-secret";
+    process.env.API_KEY = "server-secret"; // gitleaks:allow
   });
 
   afterEach(() => {
@@ -60,7 +60,7 @@ describe("backend BFF route", () => {
     );
 
     const headers = upstream.mock.calls[0][1].headers as Headers;
-    expect(headers.get("X-API-Key")).toBe("server-secret");
+    expect(headers.get("X-API-Key")).toBe("server-secret"); // gitleaks:allow
     expect(response.status).toBe(429);
     expect(response.headers.get("Retry-After")).toBe("27");
   });

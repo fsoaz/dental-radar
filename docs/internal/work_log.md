@@ -1,5 +1,6 @@
 # Work Log
 
+- 2026-08-18: Closed the current QA report findings — endpoint-specific scoring errors and inline band validation, durable Postgres rescore jobs with a serialized worker and polling UI, index-driven score/name pagination, one-shot Compose migrations, accessible table-header sorting, frontend security headers, and synchronized operator/reference/internal docs. Verification: 90 backend tests, 22 frontend tests, lint/build clean, reversible migration, live headers, and browser render check.
 - 2026-08-17: Implemented and documented security audit remediation — CI secret/dependency gates and Dependabot, locked backend dependencies with uv, Redis-shared fail-closed rate limiting, same-origin frontend BFF with server-only API key, removal migration for dormant auth scaffolding, loopback-only service bindings, and mode-600 env-file guidance. Updated the operator, contributor, architecture, API, environment, troubleshooting, and test-evidence docs to match.
 
 > Append-only. Newest first. One entry per work session. Format below.
@@ -25,7 +26,7 @@
 - Phase/Sprint: QA / post-S7
 - Done: Full MVP QA ([qa_report_2026-07-27.md](qa_report_2026-07-27.md)); fixed P0-1/P0-2 and P1-3…P1-10 (signal wipe, scoring-config validation, operator `X-API-Key`, rate limits, discovery errors, prod URL/bind, scoring settings UI + clinic actions, related P2/P3). Post-fix verification closed both P0s and all P1s; remediated rate-limiter XFF bypass (§9.3); fail-closed auth (`ALLOW_UNAUTHENTICATED`); frontend tests 6→15; backend tests →87. Docs synced (api_rules, architecture, deploy pre-flight, README).
 - Decisions: Pilot call = **Yes, with reservations** (network isolation + deploy pre-flight). JWT login still post-MVP; operator API key covers mutating routes. Trust nobody for forwarded headers by default.
-- Next: Pilot with real data; measure Hot-clinic contact quality; async rescore before >~2k clinics.
+- Next: Pilot with real data; measure Hot-clinic contact quality.
 
 ### 2026-07-03 — LLM provider/config hardening
 - Phase/Sprint: Hardening / post-S7

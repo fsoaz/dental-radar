@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.application.use_cases.compute_score import (
     ComputeScore,
+    GetRescoreJob,
     GetScoringConfig,
     RescoreAll,
     UpdateScoringConfig,
@@ -22,6 +23,9 @@ from app.infrastructure.db.session import SessionLocal
 from app.infrastructure.repositories.sqlalchemy_clinic_repo import SqlAlchemyClinicRepository
 from app.infrastructure.repositories.sqlalchemy_enrichment_repo import (
     SqlAlchemyEnrichmentRepository,
+)
+from app.infrastructure.repositories.sqlalchemy_rescore_job_repo import (
+    SqlAlchemyRescoreJobRepository,
 )
 from app.infrastructure.repositories.sqlalchemy_score_repo import SqlAlchemyScoreRepository
 from app.infrastructure.repositories.sqlalchemy_scoring_config_repo import (
@@ -81,6 +85,12 @@ def get_scoring_config_repository(
     session: Session = Depends(get_db_session),
 ) -> SqlAlchemyScoringConfigRepository:
     return SqlAlchemyScoringConfigRepository(session)
+
+
+def get_rescore_job_repository(
+    session: Session = Depends(get_db_session),
+) -> SqlAlchemyRescoreJobRepository:
+    return SqlAlchemyRescoreJobRepository(session)
 
 
 def get_website_crawler() -> Generator[HttpxWebsiteCrawler, None, None]:
@@ -155,15 +165,22 @@ def get_rescore_all(
 
 def get_get_scoring_config(
     scoring_config_repo: SqlAlchemyScoringConfigRepository = Depends(get_scoring_config_repository),
+    rescore_job_repo: SqlAlchemyRescoreJobRepository = Depends(get_rescore_job_repository),
 ) -> GetScoringConfig:
-    return GetScoringConfig(scoring_config_repo)
+    return GetScoringConfig(scoring_config_repo, rescore_job_repo)
 
 
 def get_update_scoring_config(
     scoring_config_repo: SqlAlchemyScoringConfigRepository = Depends(get_scoring_config_repository),
-    rescore_all: RescoreAll = Depends(get_rescore_all),
+    rescore_job_repo: SqlAlchemyRescoreJobRepository = Depends(get_rescore_job_repository),
 ) -> UpdateScoringConfig:
-    return UpdateScoringConfig(scoring_config_repo, rescore_all)
+    return UpdateScoringConfig(scoring_config_repo, rescore_job_repo)
+
+
+def get_get_rescore_job(
+    rescore_job_repo: SqlAlchemyRescoreJobRepository = Depends(get_rescore_job_repository),
+) -> GetRescoreJob:
+    return GetRescoreJob(rescore_job_repo)
 
 
 def get_detect_all_signals(

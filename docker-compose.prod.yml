@@ -30,6 +30,17 @@ services:
       timeout: 3s
       retries: 5
 
+  migrate:
+    image: ${API_IMAGE:-ghcr.io/${GITHUB_REPOSITORY:-local/dental-radar}/api:${IMAGE_TAG:-main}}
+    build:
+      context: ./backend
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-dental_radar}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-dental_radar}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   api:
     image: ${API_IMAGE:-ghcr.io/${GITHUB_REPOSITORY:-local/dental-radar}/api:${IMAGE_TAG:-main}}
     build:
@@ -66,8 +77,8 @@ services:
     ports:
       - "${API_BIND:-127.0.0.1}:${API_PORT:-8000}:8000"
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
     healthcheck:
@@ -76,6 +87,20 @@ services:
       timeout: 5s
       start_period: 60s
       retries: 5
+
+  worker:
+    image: ${API_IMAGE:-ghcr.io/${GITHUB_REPOSITORY:-local/dental-radar}/api:${IMAGE_TAG:-main}}
+    build:
+      context: ./backend
+    restart: unless-stopped
+    command: ["python", "-m", "app.workers.rescore"]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-dental_radar}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-dental_radar}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_JSON: ${LOG_JSON:-true}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
 
   frontend:
     image: ${FRONTEND_IMAGE:-ghcr.io/${GITHUB_REPOSITORY:-local/dental-radar}/frontend:${IMAGE_TAG:-main}}

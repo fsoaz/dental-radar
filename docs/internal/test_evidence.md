@@ -2,17 +2,24 @@
 
 > Per-sprint proof that acceptance criteria pass. Link to CI runs / paste key output. Strategy: [standards/testing.md](../standards/testing.md).
 
-## Current summary (2026-08-17)
+## Current summary (2026-08-18)
 
 | Suite | Command | Result |
 |-------|---------|--------|
-| Backend | `cd backend && DATABASE_URL=postgresql://dental_radar:dental_radar@localhost:5433/dental_radar_test uv run --locked pytest -q` | **88 passed** |
-| Frontend | `cd frontend && npm test` | **17 passed** |
+| Backend | `cd backend && DATABASE_URL=postgresql://dental_radar:dental_radar@localhost:5433/dental_radar_test uv run --locked pytest -q` | **90 passed** |
+| Frontend | `cd frontend && npm test` | **22 passed** |
 | Lint / build | `uv run ruff check .` + `uv run ruff format --check .`; `npm run lint` + `npm run build` | clean |
 | Supply chain | gitleaks; locked `pip-audit`; `npm audit --audit-level=high` | no findings |
-| Containers | production API and frontend Podman builds | pass |
+| Runtime | Alembic downgrade/upgrade; production frontend headers; browser render/overlay check | pass |
 
-> Includes the QA remediation suites plus Redis fail-closed/shared-rate-limit coverage and frontend BFF credential-boundary tests. Historical snapshots are retained below.
+> Includes durable rescore enqueue/status and null-score ordering regressions, scoring validation/error preservation, sortable-header accessibility, security-header configuration, Redis fail-closed/shared-rate-limit coverage, and frontend BFF credential-boundary tests. Historical snapshots are retained below.
+
+### QA remediation — 2026-08-18
+
+- Story: NEW-1…NEW-4, P1-8, P2-15, P3-23 — PASS
+- Evidence: 90 backend tests; 22 frontend tests; Ruff and Next lint/build clean; migration `0005` downgrade/upgrade clean; production headers and browser content/error-overlay checks passed.
+- Coverage: endpoint-specific validation messages, immediate contiguous-band validation, durable rescore enqueue/status/processing, scored/unscored ordering, accessible name/score header links, CSP/security headers, and one-shot migration startup.
+- See: [qa_report_2026-08-18.md](qa_report_2026-08-18.md) §9.
 
 ## QA remediation summary (2026-07-27) — historical
 

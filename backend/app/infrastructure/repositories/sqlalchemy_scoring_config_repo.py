@@ -42,6 +42,9 @@ class SqlAlchemyScoringConfigRepository(ScoringConfigRepository):
         ).scalar_one()
         return _model_to_config(config)
 
+    def get_config(self, version: int) -> ScoringConfig:
+        return _model_to_config(self._session.get_one(ScoringConfigModel, version))
+
     def update_active_config(
         self,
         *,
