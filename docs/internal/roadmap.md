@@ -90,5 +90,5 @@ open http://localhost:3000/clinics
 - JWT auth + operator login
 - Playwright E2E in CI
 - Additional discovery sources beyond Google Places
-- Async job queue for batch pipelines
+- Async jobs for discovery/detection/enrichment batch pipelines (scoring-config rescore is complete)
 - Multi-tenant / team roles

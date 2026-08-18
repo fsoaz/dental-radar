@@ -10,7 +10,7 @@ Stories: US-G1. Sprint S1. Goal: skeleton runs locally, DB + migrations + CI gre
 - [x] DB session + engine (`infrastructure/db/session.py`); `DATABASE_URL` from env.
 - [x] SQLAlchemy models for all tables (clinic, location, signal, score, enrichment, scoring_config, app_user).
 - [x] Alembic init; initial migration creating all tables; seed `scoring_config` v1 from `scoring_defaults.yaml`.
-- [x] `docker-compose.yml`: api + postgres + frontend; migrations run on api start (`alembic upgrade head`).
+- [x] `docker-compose.yml`: Postgres, Redis, one-shot migrator, API, rescore worker, and frontend; API/worker wait for successful migrations.
 - [x] CI workflow: ruff lint + pytest.
 - [x] Smoke test: `GET /health` 200; assert tables + seeded config exist.
 

@@ -16,6 +16,7 @@ from app.domain.exceptions import (
     ClinicSourceError,
     EnrichmentFailedError,
     InvalidQueryError,
+    RescoreJobNotFoundError,
     ScoringConfigConflictError,
     UnauthorizedError,
 )
@@ -152,6 +153,15 @@ def create_app() -> FastAPI:
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             content=_error_body("VALIDATION_ERROR", exc.message),
+        )
+
+    @app.exception_handler(RescoreJobNotFoundError)
+    async def rescore_job_not_found_handler(
+        _: Request, exc: RescoreJobNotFoundError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content=_error_body("RESCORE_JOB_NOT_FOUND", str(exc)),
         )
 
     @app.exception_handler(RequestValidationError)

@@ -2,9 +2,11 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
+from app.domain.entities.rescore_job import RescoreJob
 from app.domain.entities.scoring_config import ScoringConfig
-from app.domain.exceptions import ClinicNotFoundError
+from app.domain.exceptions import ClinicNotFoundError, RescoreJobNotFoundError
 from app.domain.repositories.clinic_repo import ClinicRepository
+from app.domain.repositories.rescore_job_repo import RescoreJobRepository
 from app.domain.repositories.score_repo import ScoreRepository
 from app.domain.repositories.scoring_config_repo import ScoringConfigRepository
 from app.domain.repositories.signal_repo import SignalRepository
@@ -90,14 +92,19 @@ class RescoreAll:
         self._clinic_repo = clinic_repo
         self._compute_score = compute_score
 
-    def execute(self, *, commit_each: bool = False) -> list[ComputeScoreResult]:
+    def execute(
+        self,
+        *,
+        commit_each: bool = False,
+        config: ScoringConfig | None = None,
+    ) -> list[ComputeScoreResult]:
         """Rescore every clinic.
 
         When ``commit_each`` is False (default for config updates), scores are
         flushed in one transaction and committed by the caller — avoiding N
         round-trips and partial multi-version state on failure.
         """
-        config = self._compute_score._scoring_config_repo.get_active_config()
+        config = config or self._compute_score._scoring_config_repo.get_active_config()
         results: list[ComputeScoreResult] = []
         for clinic_id in self._clinic_repo.list_all_ids():
             results.append(
@@ -111,11 +118,22 @@ class RescoreAll:
 
 
 class GetScoringConfig:
-    def __init__(self, scoring_config_repo: ScoringConfigRepository) -> None:
+    def __init__(
+        self,
+        scoring_config_repo: ScoringConfigRepository,
+        rescore_job_repo: RescoreJobRepository | None = None,
+    ) -> None:
         self._scoring_config_repo = scoring_config_repo
+        self._rescore_job_repo = rescore_job_repo
 
-    def execute(self) -> ScoringConfig:
-        return self._scoring_config_repo.get_active_config()
+    def execute(self) -> tuple[ScoringConfig, RescoreJob | None]:
+        config = self._scoring_config_repo.get_active_config()
+        job = (
+            self._rescore_job_repo.latest_for_config(config.version)
+            if self._rescore_job_repo is not None
+            else None
+        )
+        return config, job
 
 
 @dataclass
@@ -128,33 +146,42 @@ class UpdateScoringConfigRequest:
 @dataclass
 class UpdateScoringConfigResult:
     config: ScoringConfig
-    rescored: int = 0
+    rescore_job: RescoreJob | None = None
 
 
 class UpdateScoringConfig:
     def __init__(
         self,
         scoring_config_repo: ScoringConfigRepository,
-        rescore_all: RescoreAll | None = None,
+        rescore_job_repo: RescoreJobRepository | None = None,
     ) -> None:
         self._scoring_config_repo = scoring_config_repo
-        self._rescore_all = rescore_all
+        self._rescore_job_repo = rescore_job_repo
 
     def execute(self, request: UpdateScoringConfigRequest) -> UpdateScoringConfigResult:
-        # Defer commit when rescoring so a mid-loop failure rolls back the new
-        # config together with any partial score writes.
-        defer_commit = bool(request.rescore and self._rescore_all is not None)
+        defer_commit = bool(request.rescore and self._rescore_job_repo is not None)
         config = self._scoring_config_repo.update_active_config(
             weights=request.weights,
             bands=request.bands,
             commit=not defer_commit,
         )
-        rescored = 0
-        if defer_commit and self._rescore_all is not None:
+        job = None
+        if defer_commit and self._rescore_job_repo is not None:
             try:
-                rescored = len(self._rescore_all.execute(commit_each=False))
+                job = self._rescore_job_repo.enqueue(config.version)
                 self._scoring_config_repo.commit()
             except Exception:
                 self._scoring_config_repo.rollback()
                 raise
-        return UpdateScoringConfigResult(config=config, rescored=rescored)
+        return UpdateScoringConfigResult(config=config, rescore_job=job)
+
+
+class GetRescoreJob:
+    def __init__(self, rescore_job_repo: RescoreJobRepository) -> None:
+        self._rescore_job_repo = rescore_job_repo
+
+    def execute(self, job_id: UUID) -> RescoreJob:
+        job = self._rescore_job_repo.get(job_id)
+        if job is None:
+            raise RescoreJobNotFoundError(str(job_id))
+        return job

@@ -1,0 +1,8 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Known-fake secrets used in test fixtures, not real credentials"
+paths = [
+  '''frontend/tests/bff-route\.test\.ts''',
+]

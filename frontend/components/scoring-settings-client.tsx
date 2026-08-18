@@ -7,10 +7,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import {
   ApiRequestError,
+  fetchRescoreJob,
   fetchScoringConfig,
   updateScoringConfig,
 } from "@/lib/api";
-import type { PriorityLevel, ScoreBand, ScoringConfig } from "@/lib/types";
+import type { PriorityLevel, RescoreJob, ScoreBand, ScoringConfig } from "@/lib/types";
 
 const SIGNAL_KEYS = [
   "HIRING",
@@ -27,6 +28,38 @@ const DEFAULT_BANDS: ScoreBand[] = [
   { name: "IMMEDIATE", min: 151, max: null },
 ];
 
+function validateSettings(weights: Record<string, number>, bands: ScoreBand[]): string[] {
+  const errors: string[] = [];
+  for (const key of SIGNAL_KEYS) {
+    const value = weights[key];
+    if (!Number.isInteger(value) || value < 0 || value > 1000) {
+      errors.push(`${key.replaceAll("_", " ")} must be a whole number from 0 to 1000.`);
+    }
+  }
+  if (bands[0]?.min !== 0) errors.push("The first band must start at 0.");
+  bands.forEach((band, index) => {
+    if (!Number.isInteger(band.min) || band.min < 0) {
+      errors.push(`${band.name} minimum must be a non-negative whole number.`);
+    }
+    if (index === bands.length - 1) {
+      if (band.max !== null) errors.push("The final band must be unbounded.");
+      return;
+    }
+    if (band.max === null || !Number.isInteger(band.max) || band.max < band.min) {
+      errors.push(`${band.name} maximum must be a whole number at least ${band.min}.`);
+      return;
+    }
+    const next = bands[index + 1];
+    if (next && next.min !== band.max + 1) {
+      const kind = next.min > band.max + 1 ? "gap" : "overlap";
+      errors.push(
+        `${band.name} and ${next.name} have ${kind === "overlap" ? "an" : "a"} ${kind}; ${next.name} must start at ${band.max + 1}.`,
+      );
+    }
+  });
+  return errors;
+}
+
 export function ScoringSettingsClient() {
   const [weights, setWeights] = useState<Record<string, number>>({});
   const [bands, setBands] = useState<ScoreBand[]>(DEFAULT_BANDS);
@@ -35,6 +68,7 @@ export function ScoringSettingsClient() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [activeJob, setActiveJob] = useState<RescoreJob | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -44,7 +78,10 @@ export function ScoringSettingsClient() {
       setError(null);
       try {
         const config = await fetchScoringConfig();
-        if (!cancelled) applyConfig(config);
+        if (!cancelled) {
+          applyConfig(config);
+          setActiveJob(config.rescore_job ?? null);
+        }
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof ApiRequestError ? err.message : "Failed to load scoring config");
@@ -59,6 +96,32 @@ export function ScoringSettingsClient() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!activeJob || !["queued", "running"].includes(activeJob.status)) return;
+    let cancelled = false;
+    const timer = window.setInterval(() => {
+      void fetchRescoreJob(activeJob.id)
+        .then((job) => {
+          if (cancelled) return;
+          setActiveJob(job);
+          if (job.status === "succeeded") {
+            setMessage(`Rescore complete: ${job.rescored ?? 0} clinics updated.`);
+          } else if (job.status === "failed") {
+            setError(job.message ?? "Rescore failed. Please try again.");
+          }
+        })
+        .catch((err) => {
+          if (!cancelled) {
+            setError(err instanceof ApiRequestError ? err.message : "Failed to check rescore status");
+          }
+        });
+    }, 2000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [activeJob]);
 
   function applyConfig(config: ScoringConfig) {
     setVersion(config.version);
@@ -87,9 +150,10 @@ export function ScoringSettingsClient() {
         rescore,
       });
       applyConfig(result);
+      setActiveJob(result.rescore_job ?? null);
       setMessage(
-        rescore
-          ? `Saved version ${result.version}; rescored ${result.rescored ?? 0} clinics.`
+        result.rescore_job
+          ? `Saved version ${result.version}; rescore queued.`
           : `Saved version ${result.version}.`,
       );
     } catch (err) {
@@ -106,6 +170,10 @@ export function ScoringSettingsClient() {
       </div>
     );
   }
+
+  const validationErrors = version == null ? [] : validateSettings(weights, bands);
+  const jobRunning = activeJob && ["queued", "running"].includes(activeJob.status);
+  const actionsDisabled = saving || validationErrors.length > 0 || Boolean(jobRunning);
 
   return (
     <div className="space-y-6">
@@ -130,6 +198,9 @@ export function ScoringSettingsClient() {
                 type="number"
                 min={0}
                 max={1000}
+                step={1}
+                aria-invalid={validationErrors.length > 0}
+                aria-describedby={validationErrors.length ? "scoring-validation-errors" : undefined}
                 value={weights[key] ?? 0}
                 onChange={(event) =>
                   setWeights((current) => ({
@@ -157,7 +228,10 @@ export function ScoringSettingsClient() {
               <Input
                 type="number"
                 min={0}
+                step={1}
                 aria-label={`${band.name} min`}
+                aria-invalid={validationErrors.length > 0}
+                aria-describedby={validationErrors.length ? "scoring-validation-errors" : undefined}
                 value={band.min}
                 onChange={(event) => {
                   const next = [...bands];
@@ -168,7 +242,10 @@ export function ScoringSettingsClient() {
               <Input
                 type="number"
                 min={0}
+                step={1}
                 aria-label={`${band.name} max`}
+                aria-invalid={validationErrors.length > 0}
+                aria-describedby={validationErrors.length ? "scoring-validation-errors" : undefined}
                 placeholder={index === bands.length - 1 ? "unbounded" : "max"}
                 value={band.max ?? ""}
                 disabled={index === bands.length - 1}
@@ -183,17 +260,37 @@ export function ScoringSettingsClient() {
               />
             </div>
           ))}
+          {validationErrors.length ? (
+            <div
+              id="scoring-validation-errors"
+              role="alert"
+              className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
+            >
+              <p className="font-medium">Fix these settings before saving:</p>
+              <ul className="mt-1 list-disc space-y-1 pl-5">
+                {validationErrors.map((validationError) => (
+                  <li key={validationError}>{validationError}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 
       <div className="flex flex-wrap gap-2" aria-live="polite">
-        <Button type="button" disabled={saving} onClick={() => void save(false)}>
+        <Button type="button" disabled={actionsDisabled} onClick={() => void save(false)}>
           {saving ? "Saving…" : "Save"}
         </Button>
-        <Button type="button" variant="secondary" disabled={saving} onClick={() => void save(true)}>
+        <Button type="button" variant="secondary" disabled={actionsDisabled} onClick={() => void save(true)}>
           {saving ? "Saving…" : "Save & rescore"}
         </Button>
       </div>
+
+      {jobRunning ? (
+        <p className="text-sm text-muted-foreground" aria-live="polite">
+          Rescore {activeJob.status === "queued" ? "queued" : "running"} for version {activeJob.config_version}…
+        </p>
+      ) : null}
 
       {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
       {error ? (

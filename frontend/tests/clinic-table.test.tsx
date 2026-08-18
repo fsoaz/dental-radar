@@ -57,4 +57,21 @@ describe("ClinicTable", () => {
       "/clinics/11111111-1111-1111-1111-111111111111?priority=HOT&page=3",
     );
   });
+
+  it("builds accessible sort links while preserving filters and resetting page", () => {
+    render(<ClinicTable clinics={clinics} listQuery="priority=HOT&page=3" />);
+
+    expect(screen.getByRole("columnheader", { name: /Score/ })).toHaveAttribute(
+      "aria-sort",
+      "descending",
+    );
+    expect(screen.getByRole("link", { name: /Score/ })).toHaveAttribute(
+      "href",
+      "/clinics?priority=HOT&sort=score",
+    );
+    expect(screen.getByRole("link", { name: /Clinic Name/ })).toHaveAttribute(
+      "href",
+      "/clinics?priority=HOT&sort=name",
+    );
+  });
 });

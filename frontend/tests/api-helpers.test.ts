@@ -1,6 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ApiRequestError, buildClinicListQuery, userFacingFetchError } from "@/lib/api";
+import {
+  ApiRequestError,
+  buildClinicListQuery,
+  updateScoringConfig,
+  userFacingFetchError,
+} from "@/lib/api";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("buildClinicListQuery", () => {
   it("coerces invalid page values to defaults", () => {
@@ -32,5 +41,35 @@ describe("userFacingFetchError", () => {
     expect(userFacingFetchError(new ApiRequestError("internal", 502))).toMatch(
       /Something went wrong/,
     );
+  });
+
+  it("keeps clinic validation guidance page-specific", () => {
+    expect(userFacingFetchError(new ApiRequestError("specific backend detail", 422, "VALIDATION_ERROR"))).toMatch(
+      /reset filters/i,
+    );
+  });
+});
+
+describe("scoring API errors", () => {
+  it("preserves the backend validation message", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: "VALIDATION_ERROR",
+              message: "bands leave a gap or overlap between 10 and 50",
+              details: null,
+            },
+          }),
+          { status: 422, headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+
+    await expect(
+      updateScoringConfig({ weights: {}, bands: [], rescore: false }),
+    ).rejects.toThrow("bands leave a gap or overlap between 10 and 50");
   });
 });

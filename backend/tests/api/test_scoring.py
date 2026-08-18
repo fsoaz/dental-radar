@@ -10,6 +10,9 @@ from app.domain.entities.signal import Signal
 from app.domain.repositories.clinic_repo import ClinicListQuery
 from app.domain.services.signal_detection_service import SignalDetectionService
 from app.domain.value_objects.signal_type import SignalType
+from app.infrastructure.repositories.sqlalchemy_rescore_job_repo import (
+    SqlAlchemyRescoreJobRepository,
+)
 from app.infrastructure.repositories.sqlalchemy_score_repo import SqlAlchemyScoreRepository
 from app.infrastructure.repositories.sqlalchemy_scoring_config_repo import (
     SqlAlchemyScoringConfigRepository,
@@ -142,6 +145,27 @@ def test_list_clinics_sorts_by_score(scoring_stack):
     assert ranked.items[0].score == 70
 
 
+def test_score_sort_preserves_unscored_null_placement(scoring_stack):
+    clinic_repo, *_rest = scoring_stack
+    scored = _seed_scored_clinic(scoring_stack)
+    unscored_data = make_clinic_data(place_id=f"unscored-{uuid4()}", name="Unscored Clinic")
+    DiscoverClinics(FakeClinicSource([unscored_data]), clinic_repo).execute("dentist")
+
+    descending = clinic_repo.list_clinics(ClinicListQuery(sort="-score", page_size=20))
+    ascending = clinic_repo.list_clinics(ClinicListQuery(sort="score", page_size=20))
+
+    assert descending.items[0].clinic.id == scored.id
+    assert descending.items[-1].score is None
+    assert ascending.items[0].score is None
+    assert ascending.items[-1].clinic.id == scored.id
+
+
+def test_unknown_rescore_job_returns_404(client):
+    response = client.get(f"/api/v1/scoring-config/rescore-jobs/{uuid4()}")
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "RESCORE_JOB_NOT_FOUND"
+
+
 def test_update_scoring_config_rescores(client, db_session, scoring_stack):
     clinic = _seed_scored_clinic(scoring_stack)
     clinic_repo, _signal_repo, score_repo, scoring_repo, *_rest, compute = scoring_stack
@@ -151,7 +175,8 @@ def test_update_scoring_config_rescores(client, db_session, scoring_stack):
     from app.presentation.api.deps import get_db_session, get_update_scoring_config
 
     rescore_all = RescoreAll(clinic_repo, compute)
-    update = UpdateScoringConfig(scoring_repo, rescore_all)
+    jobs = SqlAlchemyRescoreJobRepository(db_session)
+    update = UpdateScoringConfig(scoring_repo, jobs)
 
     app = create_app()
 
@@ -186,7 +211,23 @@ def test_update_scoring_config_rescores(client, db_session, scoring_stack):
                 "rescore": True,
             },
         )
-        assert response.status_code == 200
+        assert response.status_code == 202
+        job_id = response.json()["rescore_job"]["id"]
+
+        queued = api_client.get(f"/api/v1/scoring-config/rescore-jobs/{job_id}")
+        assert queued.status_code == 200
+        assert queued.json()["status"] == "queued"
+
+    score = score_repo.get_by_clinic(clinic.id)
+    assert score is not None
+    assert score.total == 25
+
+    job = jobs.claim_next()
+    assert job is not None
+    config = scoring_repo.get_config(job.config_version)
+    results = rescore_all.execute(commit_each=False, config=config)
+    db_session.commit()
+    jobs.succeed(job.id, len(results))
 
     score = score_repo.get_by_clinic(clinic.id)
     assert score is not None

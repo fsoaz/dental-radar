@@ -48,9 +48,10 @@ The deploy script:
 
 1. Pulls the tagged API + frontend images from GHCR (fails hard if the pull fails —
    it no longer falls back to rebuilding from the local checkout)
-2. Starts `docker-compose.prod.yml` from those pulled images
-3. Runs Alembic migrations via the API entrypoint
-4. Waits for `/api/v1/health/ready` (Postgres and Redis)
+2. Starts Postgres and Redis
+3. Runs Alembic once through the one-shot `migrate` service
+4. Starts the API, durable rescore worker, and frontend only after migration succeeds
+5. Waits for `/api/v1/health/ready` (Postgres and Redis)
 
 ## Verify
 
@@ -87,6 +88,7 @@ Backups land in `./backups/` as gzip SQL dumps.
 - **Liveness:** `GET /api/v1/health/live` — process up
 - **Readiness:** `GET /api/v1/health/ready` — Postgres and Redis reachable
 - **Logs:** JSON structured request logs when `LOG_JSON=true`
+- **Rescore worker:** `docker compose -f docker-compose.prod.yml logs worker`; only one worker holds the Postgres advisory lock and processes jobs at a time
 
 ## Secrets
 
