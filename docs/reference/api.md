@@ -16,11 +16,33 @@ GET list, detail, signals, scoring-config, and health stay open so the dashboard
 
 If `API_KEY` is empty and `ALLOW_UNAUTHENTICATED` is `false`, those mutating routes return **503** `API_KEY_NOT_CONFIGURED`. If the header is missing or wrong, they return **401** `UNAUTHORIZED`.
 
-The browser uses the same-origin frontend BFF, which injects `X-API-Key` from server-only runtime configuration on writes.
+The browser uses the same-origin frontend BFF, which injects `X-API-Key` from server-only runtime configuration on writes. See [frontend API proxy](#frontend-api-proxy-bff).
+
+## Frontend API proxy (BFF)
+
+Browser code never calls the API host directly. It calls the same-origin Next.js route `/api/backend/<path>`, which forwards to `API_URL` server-side. Source: `frontend/app/api/backend/[...path]/route.ts`.
+
+```bash
+# Browser-equivalent call against the dashboard origin
+curl -sS "http://localhost:3000/api/backend/clinics?priority=HOT&page_size=20"
+```
+
+- Methods: `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE`.
+- `X-API-Key` is added from the server-only `API_KEY` on mutating methods (`POST`, `PUT`, `PATCH`, `DELETE`) only. The browser cannot supply it: the proxy forwards just `Accept`, `Content-Type`, and `X-Request-ID` upstream.
+- Responses pass through the upstream status and body, forwarding only `content-type`, `retry-after`, and `x-request-id`, always with `Cache-Control: no-store`. Upstream redirects are returned as-is, not followed.
+- Errors use the same envelope as the API, with proxy-specific codes:
+
+| HTTP | `code` | When |
+|------|--------|------|
+| 400 | `INVALID_PROXY_PATH` | Empty path, `.` / `..`, or a segment containing a slash |
+| 502 | `UPSTREAM_UNAVAILABLE` | The API host could not be reached |
+| 503 | `BFF_NOT_CONFIGURED` | `API_URL` unset, unparseable, or not HTTP(S); or a mutating request with no `API_KEY` |
+
+Configure `API_URL` and `API_KEY` for the frontend process, never as `NEXT_PUBLIC_*`: [environment](environment.md#frontend-frontendenvexample). Failure symptoms: [troubleshoot](../how-to/troubleshoot.md#dashboard-mutation-returns-503-bff_not_configured).
 
 ## Rate limits
 
-Redis-backed per-IP limiter shared by every API replica. Window is 60 seconds. Limit is `RATE_LIMIT_PER_MINUTE` (settings default **30**; local compose often **60**).
+Redis-backed per-IP limiter shared by every API replica. Window is 60 seconds. Limit is `RATE_LIMIT_PER_MINUTE` (settings default **30**; local compose defaults it to **60**).
 
 Limited paths:
 

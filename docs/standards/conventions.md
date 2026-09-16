@@ -4,7 +4,7 @@ Applies to backend (Python) and frontend (TypeScript). Keep it simple — MVP ov
 
 ## Python (backend)
 - **Version:** 3.12+. **Style:** `ruff` (lint) + `ruff format`. Line length 100.
-- **Typing:** full type hints; `mypy` in CI (non-blocking warning at MVP).
+- **Typing:** full type hints. No type checker runs in CI at MVP; `ruff` (`E`, `F`, `I`, `UP`) is the only enforced gate.
 - **Naming:** `snake_case` functions/vars, `PascalCase` classes, `UPPER_SNAKE` consts, modules `snake_case`.
 - **Architecture rule:** Domain imports nothing from `infrastructure`/`presentation`. Enforced by review (optionally `import-linter`).
 - **Use cases:** one class/function per use case, single `execute()` entry. No framework imports in domain/application.
@@ -15,7 +15,7 @@ Applies to backend (Python) and frontend (TypeScript). Keep it simple — MVP ov
 - **Logging:** JSON structured logs when `LOG_JSON=true`; request middleware adds `X-Request-ID`.
 
 ## TypeScript (frontend)
-- **Style:** ESLint (`next lint`). Strict TS (`strict: true`).
+- **Style:** ESLint via `npm run lint` (`eslint .`). Strict TS (`strict: true`).
 - **Naming:** `PascalCase` components, `camelCase` vars/functions, files `kebab-case.tsx`.
 - **Data fetching:** typed API client in `lib/api.ts`; components use fetch helpers, not scattered raw URLs.
 - **Styling:** Tailwind utility-first; shared UI via shadcn-style components in `components/ui/`.

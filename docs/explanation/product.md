@@ -95,6 +95,8 @@ Priority bands:
 | Hot | 101–150 |
 | Immediate Outreach | 150+ |
 
+> Original requirement, kept as written. What shipped names the top band `IMMEDIATE` and starts it at **151** — 150 falls in `HOT`. Current defaults: [tune scoring](../how-to/tune-scoring.md#prerequisites); they are operator-editable per deployment.
+
 ### 5.5 AI Enrichment Layer
 An LLM analyzes the clinic website + profile and returns:
 - Growth Probability (0–100)

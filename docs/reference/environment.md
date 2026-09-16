@@ -23,8 +23,8 @@ Compose injects API variables from the root `.env`. Browser requests use the sam
 | `DATABASE_URL` | `postgresql://dental_radar:dental_radar@localhost:5432/dental_radar` | SQLAlchemy URL. Compose Postgres on the **host** is port **5433**. |
 | `API_KEY` | empty | Operator key. Send as `X-API-Key`. Empty + `ALLOW_UNAUTHENTICATED=false` → **503**. |
 | `ALLOW_UNAUTHENTICATED` | `true` in `.env.example`; **`false` in settings** | Local/test escape hatch. Compose also defaults `true`. |
-| `RATE_LIMIT_PER_MINUTE` | `30` | In-app limiter. Local compose often sets `60`. |
-| `REDIS_URL` | `redis://localhost:6379/0` | Shared rate-limit store. Limited routes fail closed if unavailable. |
+| `RATE_LIMIT_PER_MINUTE` | `30` | In-app limiter. Local compose defaults it to `60`; set it in `.env` to override. |
+| `REDIS_URL` | `redis://localhost:6379/0` | Shared rate-limit store. Limited routes fail closed if unavailable. Compose publishes no host port for Redis, so a host API needs its own — see [run on the host](../../CONTRIBUTING.md#run-on-the-host). |
 | `RATE_LIMIT_TRUSTED_PROXIES` | empty | Proxy IPs/CIDRs whose `X-Forwarded-For` may set the client key. Empty = trust none. |
 | `FORWARDED_ALLOW_IPS` | empty | uvicorn `X-Forwarded-*` trust list. Keep in sync with `RATE_LIMIT_TRUSTED_PROXIES`. |
 | `GOOGLE_PLACES_API_KEY` | empty | Discovery. Leave unset until you ingest. |
@@ -42,7 +42,7 @@ Compose injects API variables from the root `.env`. Browser requests use the sam
 | `GEMINI_MODEL` | `gemini-2.0-flash` | Gemini model id. |
 | `CORS_ORIGINS` | localhost variants on 3000/3001 | Comma-separated browser origins. Production: public frontend origin only. |
 | `LOG_LEVEL` | `INFO` | |
-| `LOG_JSON` | `true` in example; compose local often `false` | Structured request logs. |
+| `LOG_JSON` | `true` in example; local compose defaults it to `false` | Structured request logs. |
 | `APP_ENV` | `development` | `production` disables `/docs`, `/redoc`, `/openapi.json`. |
 
 Settings also accept (not in `.env.example`; defaults in code):

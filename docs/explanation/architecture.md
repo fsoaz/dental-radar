@@ -9,8 +9,10 @@
 
 ```mermaid
 flowchart LR
-  subgraph Client
-    FE[Next.js Dashboard<br/>TS + Tailwind + shadcn/ui]
+  BR[Browser]
+  subgraph Client[Next.js server · operator surface]
+    FE["Dashboard pages<br/>TS + Tailwind + shadcn/ui"]
+    BFF["Same-origin BFF route /api/backend/*<br/>holds API_KEY server-side"]
   end
   subgraph Server[FastAPI Backend]
     API[REST API /api/v1]
@@ -23,7 +25,9 @@ flowchart LR
   WEB[Clinic Websites]
   LLM[LLM Provider<br/>GPT default · Claude · Gemini]
 
-  FE -->|HTTP JSON| API
+  BR -->|page loads| FE
+  BR -->|HTTP JSON| BFF
+  BFF -->|HTTP JSON + X-API-Key on writes| API
   API --> UC --> DOM
   UC --> INFRA
   INFRA --> DB
@@ -138,27 +142,18 @@ classDiagram
 
 ## 3. Scoring engine & configuration
 
-`ScoringConfig` holds signal weights + band thresholds, persisted in table `scoring_config` (one active row, versioned). Seeded from defaults:
+`ScoringConfig` holds signal weights + band thresholds, persisted in table `scoring_config` (one active row, versioned):
 
 ```json
 {
   "version": 1,
   "active": true,
-  "weights": {
-    "HIRING": 25,
-    "ADVERTISING": 30,
-    "WEBSITE_QUALITY": 15,
-    "MULTI_LOCATION": 40,
-    "HIGH_TICKET": 20
-  },
-  "bands": [
-    {"name": "COLD",      "min": 0,   "max": 50},
-    {"name": "WARM",      "min": 51,  "max": 100},
-    {"name": "HOT",       "min": 101, "max": 150},
-    {"name": "IMMEDIATE", "min": 151, "max": null}
-  ]
+  "weights": { "<SIGNAL_TYPE>": "<int weight>" },
+  "bands": [ {"name": "<BAND>", "min": 0, "max": 50}, {"name": "<BAND>", "min": 51, "max": null} ]
 }
 ```
+
+Bands must start at `0`, be contiguous, and leave the last one unbounded (`max: null`). Seed values live in `infrastructure/config/scoring_defaults.yaml` and are the source of truth for defaults; they are reproduced for operators in [tune scoring](../how-to/tune-scoring.md#prerequisites).
 
 `ScoringService.compute(signals, config)` → `Score`. Editing the active config via API (`PUT /api/v1/scoring-config`) and requesting `rescore=true` atomically creates a durable job. The worker processes jobs in version order and updates every score in one transaction — **no redeploy, no code change**. Optionally a YAML default seed (`infrastructure/config/scoring_defaults.yaml`) bootstraps the first row.
 
@@ -479,7 +474,8 @@ dental-radar/
 ├── backend/
 ├── frontend/
 ├── docs/                       tutorials, how-to, explanation, reference, standards, internal
-├── scripts/                    deploy.sh, rollback.sh, backup-postgres.sh, wait-for-health.sh
+├── scripts/                    deploy.sh, rollback.sh, backup-postgres.sh, wait-for-health.sh,
+│                               seed_demo_data.py (local demo data)
 ├── docker-compose.yml          local dev
 ├── docker-compose.prod.yml     production
 ├── .env.example
@@ -511,7 +507,8 @@ backend/
 │   │   ├── sources/         google_places.py
 │   │   ├── crawler/         website_crawler.py
 │   │   ├── ai/              factory.py enrichment_parser.py providers/base_provider.py prompts/
-│   │   ├── config/          settings.py logging_config.py
+│   │   ├── config/          settings.py scoring_defaults.yaml
+│   │   ├── logging_config.py
 │   │   └── migrations/      (alembic) env.py versions/
 │   ├── presentation/
 │   │   ├── middleware/      request_logging.py rate_limit.py
@@ -533,6 +530,7 @@ frontend/
 │   ├── layout.tsx
 │   ├── globals.css
 │   ├── page.tsx                  redirect → /clinics
+│   ├── api/backend/[...path]/    server-only BFF proxy: injects X-API-Key on writes
 │   ├── clinics/
 │   │   ├── page.tsx              ranked list + search + filters
 │   │   └── [id]/page.tsx         clinic detail

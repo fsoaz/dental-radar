@@ -20,7 +20,7 @@ Conventions for the FastAPI backend. Endpoint catalog in [architecture.md → AP
 | Update/replace | PUT | 200, or 202 when it also queues async work |
 | Delete | DELETE | 204 |
 | Health (live) | GET | 200 |
-| Health (ready) | GET | 200 when DB answers `SELECT 1` |
+| Health (ready) | GET | 200 when Postgres and Redis answer; 503 `degraded` otherwise |
 
 **MVP exception:** discover, detect, score, and enrich are synchronous and return **200**, not 201/202. There is no 201 Location for discovery (upsert by `place_id`).
 
@@ -39,12 +39,12 @@ Conventions for the FastAPI backend. Endpoint catalog in [architecture.md → AP
 | Path | Purpose |
 |------|---------|
 | `GET /health/live` | Liveness — no DB check |
-| `GET /health/ready` | Readiness — verifies DB connectivity |
+| `GET /health/ready` | Readiness — verifies Postgres and Redis |
 | `GET /health` | Legacy alias for readiness |
 
 Orchestrators should use `/health/ready` after deploy; use `/health/live` for process restarts only.
 
-`GET /health/ready` returns 200 `{ "status": "ok" }` when `SELECT 1` succeeds. If the database is unreachable, the handler does not catch the error; the generic **500** `INTERNAL_ERROR` path runs. Legacy `GET /health` catches DB errors and returns **503** `{ "status": "degraded" }`.
+`GET /health/ready` returns 200 `{ "status": "ok" }` when Postgres answers `SELECT 1` **and** Redis answers `PING`. If either fails, it returns **503** `{ "status": "degraded" }` — not a 500. Redis is part of readiness because the rate limiter fails closed without it. Legacy `GET /health` is an identical alias with the same checks and the same 503 behavior.
 
 ## Error envelope
 ```json

@@ -50,6 +50,23 @@ Open http://localhost:3000/clinics.
 
 The list is empty until you ingest clinics. Scoring settings live at http://localhost:3000/settings/scoring.
 
+## 5. Optional — load demo data
+
+The list stays empty until you ingest real clinics, which costs money. To see a populated dashboard for free, seed 10 fictional clinics with locations, signals, scores, and pre-written enrichment text. No Google Places or LLM call is made.
+
+Requires **Python 3.12+** and [uv](https://docs.astral.sh/uv/) on the host, and a stack whose migrations have run (step 2 does that):
+
+```bash
+cd backend
+uv sync --locked --extra dev
+DATABASE_URL=postgresql://dental_radar:dental_radar@localhost:5433/dental_radar \
+  uv run --locked python ../scripts/seed_demo_data.py
+```
+
+The script prints one line per clinic with its computed score and band. Scores come from the active `scoring_config`, so they change if you edit weights. Enrichment rows are labelled `provider="demo_gpt"` — they are canned text, not model output.
+
+Re-running the script replaces the same demo rows (`place_id` values `demo_place_01`–`demo_place_10`) and leaves any real clinics untouched. There is no undo command; `docker compose down -v` discards the whole database.
+
 ## What you have running
 
 | Service | Host |

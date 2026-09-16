@@ -56,7 +56,42 @@ npm test
 npm run build
 ```
 
-This project uses Next.js 15 with React 19. Run `npm audit --audit-level=high` before submitting dependency changes; CI enforces the same high/critical gate. Do not run `npm audit fix --force` or use `--legacy-peer-deps`: make compatible, reviewed updates and commit the resulting lockfile.
+This project tracks the Next.js and React versions pinned in `frontend/package.json` (currently Next.js 16 with React 19); read `frontend/AGENTS.md` before writing frontend code, because this Next major changed conventions. Run `npm audit --audit-level=high` before submitting dependency changes; CI enforces the same high/critical gate. Do not run `npm audit fix --force` or use `--legacy-peer-deps`: make compatible, reviewed updates and commit the resulting lockfile.
+
+## Run on the host
+
+`docker compose up --build` is enough for most work. Run a service on the host when you want hot reload or a debugger.
+
+Both host processes need the compose backing services. Postgres is published on **5433**; **Redis is not published at all**, so a host API needs its own Redis or every rate-limited route fails closed with **503** `RATE_LIMIT_UNAVAILABLE` and `/health/ready` reports `degraded`:
+
+```bash
+docker compose up -d postgres
+docker run -d --name dental-radar-redis -p 6379:6379 redis:7-alpine
+```
+
+### API
+
+```bash
+cd backend
+uv sync --locked --extra dev
+export DATABASE_URL=postgresql://dental_radar:dental_radar@localhost:5433/dental_radar
+export ALLOW_UNAUTHENTICATED=true   # local only; otherwise set API_KEY and send X-API-Key
+uv run --locked alembic upgrade head
+uv run --locked uvicorn app.main:app --reload
+```
+
+The API serves http://localhost:8000; `/docs` is available because `APP_ENV` defaults to `development`. Settings read `.env` relative to the working directory, so a host API started from `backend/` loads `backend/.env`, not the repository-root `.env`. Real environment variables win over both.
+
+Auth fails closed on the host: `.env.example` sets `ALLOW_UNAUTHENTICATED=true`, but a host process that does not load that file gets the settings default `false`. See [troubleshoot](docs/how-to/troubleshoot.md#mutating-route-returns-503-api_key_not_configured).
+
+### Dashboard
+
+```bash
+cd frontend
+npm run dev
+```
+
+Set `API_URL=http://localhost:8000/api/v1` in `frontend/.env.local` (created in the step above), plus the same `API_KEY` the backend uses, or dashboard writes return **503** `BFF_NOT_CONFIGURED`. Open http://localhost:3000/clinics.
 
 ## Documentation
 

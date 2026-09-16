@@ -62,6 +62,10 @@ uv run dental-radar test-connection
 
 Sends a canned clinic payload to the configured LLM provider. Use this before `enrich --all`. Exit code 1 on failure; prints provider error details to stderr.
 
+## Related scripts
+
+`scripts/seed_demo_data.py` is not part of this CLI. It inserts 10 fictional clinics for local usability testing without calling any paid provider: [getting started → load demo data](../tutorials/getting-started.md#5-optional--load-demo-data).
+
 ## End-to-end
 
 Operator walkthrough: [run the pilot pipeline](../how-to/run-pilot-pipeline.md). HTTP equivalents: [API](api.md).

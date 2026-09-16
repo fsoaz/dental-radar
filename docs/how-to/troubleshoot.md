@@ -54,7 +54,7 @@ Status **503**. Affects `POST /clinics/discover`, `POST /clinics/{id}/signals:de
 **Fix**
 
 - Local compose: keep `ALLOW_UNAUTHENTICATED=true` in `docker-compose.yml`, or set `API_KEY` in `.env` and send `X-API-Key`.
-- Host API: `export ALLOW_UNAUTHENTICATED=true` for local-only, or set `API_KEY` and send the header.
+- Host API: `export ALLOW_UNAUTHENTICATED=true` for local-only, or set `API_KEY` and send the header. Full host setup: [run on the host](../../CONTRIBUTING.md#run-on-the-host).
 - Production: set a non-empty `API_KEY` and leave `ALLOW_UNAUTHENTICATED=false`. See [deploy pre-flight](deploy.md#pre-flight-security).
 
 A present but wrong key returns **401** `UNAUTHORIZED`, not 503.
@@ -68,7 +68,7 @@ The browser sends writes to the same-origin `/api/backend` proxy. That server-si
 **Fix**
 
 - Compose: set a non-empty `API_KEY` in the root `.env`; Compose supplies the same key to the API and frontend containers.
-- Host frontend: copy `frontend/.env.example` to `frontend/.env.local`, then set `API_URL=http://localhost:8000/api/v1` and the same `API_KEY` used by the backend.
+- Host frontend: copy `frontend/.env.example` to `frontend/.env.local`, then set `API_URL=http://localhost:8000/api/v1` and the same `API_KEY` used by the backend. Full host setup: [run on the host](../../CONTRIBUTING.md#run-on-the-host).
 - Restart the frontend after changing its environment.
 
 ## Rate-limited route returns 503 `RATE_LIMIT_UNAVAILABLE`
@@ -85,6 +85,7 @@ Redis is unavailable, so the API fails closed rather than silently removing shar
 
 - Run `docker compose ps redis` and `docker compose logs redis`.
 - Confirm `REDIS_URL` points to `redis://redis:6379/0` inside Compose or the correct external Redis endpoint.
+- Host API: compose does not publish the Redis port, so `redis://localhost:6379/0` reaches nothing. Start your own Redis — see [run on the host](../../CONTRIBUTING.md#run-on-the-host).
 - Restore Redis; do not bypass the limiter for availability.
 
 ## Dashboard shows an empty list or stale data after ingest
@@ -115,7 +116,7 @@ Use local compose (`APP_ENV=development`) or read [API reference](../reference/a
 
 ## Rate limited (429 `RATE_LIMITED`)
 
-Default is `RATE_LIMIT_PER_MINUTE` (settings default **30**; local compose often **60**). Limits apply to discover, mutating `PUT /scoring-config`, paths ending in `/signals:detect`, and paths ending in `/enrich`. Read-only `GET` routes and `POST /clinics/{id}/score` are not rate-limited.
+Default is `RATE_LIMIT_PER_MINUTE` (settings default **30**; local compose defaults it to **60**). Limits apply to discover, mutating `PUT /scoring-config`, paths ending in `/signals:detect`, and paths ending in `/enrich`. Read-only `GET` routes and `POST /clinics/{id}/score` are not rate-limited.
 
 Wait for the window, or raise the env var in local only.
 

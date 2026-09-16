@@ -2,7 +2,7 @@
 
 Pragmatic MVP testing — cover the logic that matters (scoring, signal rules, ingestion), mock the expensive externals.
 
-**Current verified counts (2026-08-17):** 88 backend (`pytest`), 17 frontend (`vitest`). Recount after adding tests. Evidence: [test_evidence.md](../internal/test_evidence.md).
+**Current counts (2026-09-15):** 90 backend tests (`uv run --locked pytest --collect-only -q`); 22 frontend test cases across 7 Vitest files (counted from `frontend/tests/`; CI runs `npm test`). Recount after adding tests. Evidence: [test_evidence.md](../internal/test_evidence.md).
 
 ## Backend (pytest)
 
@@ -46,7 +46,7 @@ Layered, matching Clean Architecture:
 
 | Workflow | Trigger | Jobs |
 |----------|---------|------|
-| `ci.yml` | PR + push to `main` | gitleaks; backend locked install + ruff + pytest + pip-audit; frontend `npm ci` + eslint + vitest + high/critical audit gate |
+| `ci.yml` | PR + push to `main` | gitleaks; backend locked install + ruff + alembic upgrade + pytest + pip-audit; frontend `npm ci` + eslint + vitest + `next build` + high/critical audit gate |
 | `deploy.yml` | push to `main` | same security/test gate → build/push GHCR images → smoke deploy + rollback |
 
 Dependabot monitors both package ecosystems. Green CI is required to merge, and deploy images are not published unless the gate passes. Test evidence is summarized in [test_evidence.md](../internal/test_evidence.md) per sprint.

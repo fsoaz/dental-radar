@@ -46,4 +46,4 @@ The development stack is reachable only from the local machine. Keep that loopba
 
 ## Contribute
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for lint, tests, the test database, and the docs-in-the-same-PR rule. Human-readable history: [CHANGELOG.md](CHANGELOG.md).
+See [CONTRIBUTING.md](CONTRIBUTING.md) for lint, tests, the test database, [running the API or dashboard on the host](CONTRIBUTING.md#run-on-the-host), and the docs-in-the-same-PR rule. Human-readable history: [CHANGELOG.md](CHANGELOG.md).

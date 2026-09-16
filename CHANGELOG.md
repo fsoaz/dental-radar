@@ -11,12 +11,21 @@ Human-readable history of Dental Radar. Commit messages are not a substitute for
 - Redis-backed rate limits shared across API replicas, with fail-closed behavior and readiness checks.
 - Durable Postgres-backed rescore jobs with a dedicated worker and status polling in scoring settings.
 - Accessible score/name table-header sorting and immediate scoring-band validation.
+- `scripts/seed_demo_data.py`: 10 fictional clinics with locations, signals, scores, and canned enrichment text, so a local dashboard can be populated without paid providers.
+- Documented host-mode development (API under uvicorn, dashboard under `npm run dev`) in `CONTRIBUTING.md`, including the Redis port compose does not publish.
+
+### Changed
+
+- Frontend toolchain moved to Next.js 16 (React 19) and Tailwind CSS v4. Conventions changed with the Next major — see `frontend/AGENTS.md`.
+- CI frontend job runs `next build` in addition to lint and Vitest.
+- Backend `ruff` pinned to 0.16.3; the pre-commit hook now pins the same version so local formatting matches the CI gate.
 
 ### Fixed
 
 - Preserve endpoint-specific backend validation messages instead of rewriting scoring errors as clinic-filter guidance.
 - Drive score-ranked pagination from the score index and add indexed clinic-name ordering.
 - Run Alembic once through a migration service before API/worker startup rather than in every API replica.
+- Documentation accuracy pass: `/health/ready` documented as returning 503 `degraded` (it checks Postgres **and** Redis, and never 500s on their failure), removed a `mypy`-in-CI claim that no workflow runs, corrected the `next lint` command, refreshed test counts, added the BFF proxy to the architecture diagram and folder trees, documented the frontend proxy's own error codes in the API reference, and left `scoring_defaults.yaml` plus [tune scoring](docs/how-to/tune-scoring.md) as the only copies of the default weights and bands.
 
 ### Security
 

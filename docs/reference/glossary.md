@@ -26,14 +26,7 @@ Sum of `applied_weight` for detected signals (plus optional AI contribution in t
 
 ## Priority band
 
-Label derived from total score using the active `scoring_config` bands. Defaults:
-
-| Band | Score |
-|------|-------|
-| `COLD` | 0–50 |
-| `WARM` | 51–100 |
-| `HOT` | 101–150 |
-| `IMMEDIATE` | 151+ |
+Label derived from total score using the active `scoring_config` bands: `COLD`, `WARM`, `HOT`, `IMMEDIATE`, in ascending score order. Bands are operator-editable, so the thresholds depend on the deployment — the seeded defaults are listed in [tune scoring](../how-to/tune-scoring.md#prerequisites).
 
 ## Scoring config
 
