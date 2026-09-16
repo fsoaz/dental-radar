@@ -22,7 +22,7 @@ class TransientLLMError(Exception):
 class ConfigurationError(Exception):
     """Raised for permanent provider misconfiguration (e.g. missing API key).
 
-    Not retried by analyze_clinic_with_retries — retrying a config error just
+    Not retried by ResilientLLMProvider — retrying a config error just
     wastes the retry budget on something that will never succeed.
     """
 
@@ -31,8 +31,8 @@ class ConfigurationError(Exception):
 def _wrap_transient_errors(provider_name: str):
     """Reclassify network/parse failures as TransientLLMError so retry+fallback engage.
 
-    Without this, a plain connection timeout or a malformed API response bypasses
-    analyze_clinic_with_retries entirely (it only catches TransientLLMError).
+    Without this, a plain connection timeout or malformed API response bypasses
+    ResilientLLMProvider's retry loop, which catches only TransientLLMError.
     """
     try:
         yield

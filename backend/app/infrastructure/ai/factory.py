@@ -1,12 +1,8 @@
-import time
-
-from app.application.dto.enrichment_dto import ClinicAIInput, LLMCompletion
 from app.application.ports.llm_provider import LLMProvider
 from app.infrastructure.ai.providers.base_provider import (
     ClaudeProvider,
     GeminiProvider,
     GPTProvider,
-    TransientLLMError,
 )
 from app.infrastructure.config.settings import Settings, settings
 
@@ -45,52 +41,3 @@ def create_llm_provider(
         )
 
     raise ValueError(f"Unsupported AI provider: {name}")
-
-
-def analyze_clinic_with_retries(
-    provider: LLMProvider,
-    payload: ClinicAIInput,
-    *,
-    max_retries: int = 3,
-) -> LLMCompletion:
-    if max_retries < 1:
-        raise ValueError("max_retries must be >= 1")
-
-    last_error: Exception | None = None
-    for attempt in range(max_retries):
-        try:
-            return provider.analyze_clinic(payload)
-        except TransientLLMError as exc:
-            last_error = exc
-            if attempt == max_retries - 1:
-                break
-            time.sleep(2**attempt)
-    assert last_error is not None
-    raise last_error
-
-
-def analyze_clinic_resilient(
-    payload: ClinicAIInput,
-    *,
-    app_settings: Settings | None = None,
-) -> LLMCompletion:
-    cfg = app_settings or settings
-    primary = create_llm_provider(cfg.ai_provider, app_settings=cfg)
-
-    try:
-        return analyze_clinic_with_retries(
-            primary,
-            payload,
-            max_retries=cfg.ai_retry_max,
-        )
-    except Exception as primary_error:
-        fallback_name = (cfg.ai_fallback_provider or "").strip().lower()
-        if not fallback_name or fallback_name == primary.provider_name:
-            raise primary_error
-
-        fallback = create_llm_provider(fallback_name, app_settings=cfg)
-        return analyze_clinic_with_retries(
-            fallback,
-            payload,
-            max_retries=cfg.ai_retry_max,
-        )

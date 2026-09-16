@@ -7,5 +7,4 @@ class PageEvidence:
     html: str
     text: str
     scripts: list[str]
-    meta: dict[str, str]
     links: list[str]

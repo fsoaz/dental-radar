@@ -42,4 +42,12 @@ Re-verified in source, not re-raised: SSRF guard, fail-closed auth, rate-limiter
 
 ---
 
-_No PR-specific findings yet._
+### Balanced architecture remediation — 2026-09-16
+
+- [x] `score --all` — **high** — batch scores were flushed but lost when the CLI session closed. **Fixed:** explicit per-clinic commits in the CLI; durable worker rescoring remains one transaction.
+- [x] application/domain imports — **med** — crawling and enrichment crossed inward dependency boundaries. **Fixed:** domain page evidence, application crawler errors and input normalization, plus an injected infrastructure resilient-provider adapter; static tests enforce the rule.
+- [x] scoring defaults and UI — **low** — unused YAML and frontend fallback bands implied multiple sources of truth. **Fixed:** the active database row is authoritative; migration `0001` remains the immutable bootstrap definition.
+- [ ] Redis simplification — **deferred** — reconsider only if supported deployment is explicitly limited to one API process and restart-reset counters are accepted. Current fail-closed shared limiting and readiness coupling remain required.
+- [ ] score pagination simplification — **deferred** — reconsider only in a separate performance PR with reproducible `EXPLAIN ANALYZE` results and an agreed maximum dataset size. Boundary regression coverage now protects the indexed two-partition query.
+- [ ] broader composition/UoW/repository/fallback/worker-lock redesign — **deferred** — no current acceptance criterion or deployment evidence requires these changes.
+- [ ] frontend test tooling — **low** — npm reports a moderate `@vitest/mocker` path-traversal advisory in the development-only Vitest graph. The available automatic fix does not yet move beyond the affected range; update when a patched compatible release is available.

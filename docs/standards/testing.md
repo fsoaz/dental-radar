@@ -2,7 +2,7 @@
 
 Pragmatic MVP testing — cover the logic that matters (scoring, signal rules, ingestion), mock the expensive externals.
 
-**Current counts (2026-09-15):** 90 backend tests (`uv run --locked pytest --collect-only -q`); 22 frontend test cases across 7 Vitest files (counted from `frontend/tests/`; CI runs `npm test`). Recount after adding tests. Evidence: [test_evidence.md](../internal/test_evidence.md).
+**Current counts (2026-09-16):** 109 backend tests (`uv run --locked pytest --collect-only -q`); 23 frontend test cases across 7 Vitest files (CI runs `npm test`). Evidence: [test_evidence.md](../internal/test_evidence.md).
 
 ## Backend (pytest)
 
@@ -19,9 +19,10 @@ Layered, matching Clean Architecture:
 - Config-driven scoring: changing weights/bands changes result without code change.
 - Discovery upsert: same `place_id` updates, no duplicate.
 - Signal detection: each detector fires on known evidence, ignores absent evidence.
-- Enrichment: schema clamp/truncate, repair-retry, skip-on-unchanged, fake provider in API tests.
+- Enrichment: schema clamp/truncate, resilient retry/fallback, skip-on-unchanged, fake provider in API tests.
+- Architecture: static dependency-boundary checks for domain and application modules.
 - Health: live, ready, legacy `/health`.
-- API: list filters/sort/pagination; 404 paths.
+- API: list filters/sort/pagination, including scored/unscored partition boundaries; 404 paths.
 - Crawler SSRF guard: rejects non-http(s) schemes, private/loopback/metadata IPs, and redirects to internal addresses.
 
 ## Mocking externals

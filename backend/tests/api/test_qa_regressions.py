@@ -7,7 +7,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.application.use_cases.compute_score import ComputeScore, RescoreAll, UpdateScoringConfig
+from app.application.use_cases.compute_score import ComputeScore, UpdateScoringConfig
 from app.application.use_cases.detect_signals import DetectSignals
 from app.application.use_cases.discover_clinics import DiscoverClinics
 from app.domain.repositories.clinic_repo import ClinicListQuery
@@ -249,8 +249,8 @@ def test_p2_18_literal_percent_search(scoring_stack):
 
 def test_p3_21_noop_config_keeps_version(scoring_stack, db_session):
     clinic = _seed_scored_clinic(scoring_stack)
-    clinic_repo, _signal_repo, _score_repo, scoring_repo, *_rest, compute = scoring_stack
-    update = UpdateScoringConfig(scoring_repo, RescoreAll(clinic_repo, compute))
+    _clinic_repo, _signal_repo, _score_repo, scoring_repo, *_rest = scoring_stack
+    update = UpdateScoringConfig(scoring_repo)
 
     app = create_app()
 

@@ -10,6 +10,7 @@ from app.application.use_cases.discover_clinics import DiscoverClinics
 from app.application.use_cases.enrich_clinic import EnrichAllClinics, EnrichClinic
 from app.domain.services.signal_detection_service import SignalDetectionService
 from app.infrastructure.ai.factory import create_llm_provider
+from app.infrastructure.ai.resilient_provider import ResilientLLMProvider
 from app.infrastructure.config.settings import settings
 from app.infrastructure.crawler.website_crawler import HttpxWebsiteCrawler
 from app.infrastructure.db.session import SessionLocal
@@ -31,7 +32,7 @@ def _build_score_stack(session):
     score_repo = SqlAlchemyScoreRepository(session)
     scoring_repo = SqlAlchemyScoringConfigRepository(session)
     compute = ComputeScore(clinic_repo, signal_repo, score_repo, scoring_repo)
-    return clinic_repo, compute, RescoreAll(clinic_repo, compute)
+    return clinic_repo, compute, RescoreAll(clinic_repo, compute, scoring_repo)
 
 
 def run_discover(query: str) -> int:
@@ -94,7 +95,14 @@ def _build_enrich_stack(session):
     clinic_repo = SqlAlchemyClinicRepository(session)
     enrichment_repo = SqlAlchemyEnrichmentRepository(session)
     crawler = HttpxWebsiteCrawler(timeout=settings.crawler_timeout_seconds)
-    enrich = EnrichClinic(clinic_repo, enrichment_repo, crawler)
+    provider = ResilientLLMProvider(app_settings=settings)
+    enrich = EnrichClinic(
+        clinic_repo,
+        enrichment_repo,
+        crawler,
+        provider,
+        settings.ai_max_site_text_chars,
+    )
     return clinic_repo, enrich, crawler, EnrichAllClinics(clinic_repo, enrich)
 
 
@@ -103,7 +111,7 @@ def run_score(clinic_id: UUID | None, score_all: bool) -> int:
     try:
         _clinic_repo, compute, rescore_all = _build_score_stack(session)
         if score_all:
-            results = rescore_all.execute()
+            results = rescore_all.execute(commit_each=True)
             print(f"Scored {len(results)} clinics")
             return 0
         if clinic_id is None:

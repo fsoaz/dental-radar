@@ -1,6 +1,6 @@
 # LLM provider rules
 
-How enrichment calls providers, prompts, retries, and fallback. Wiring: [`factory.py`](../../backend/app/infrastructure/ai/factory.py), [`base_provider.py`](../../backend/app/infrastructure/ai/providers/base_provider.py), [`enrichment_parser.py`](../../backend/app/infrastructure/ai/enrichment_parser.py).
+How enrichment calls providers, prompts, retries, and fallback. Wiring: [`resilient_provider.py`](../../backend/app/infrastructure/ai/resilient_provider.py), [`factory.py`](../../backend/app/infrastructure/ai/factory.py), [`base_provider.py`](../../backend/app/infrastructure/ai/providers/base_provider.py), [`enrichment_parser.py`](../../backend/app/infrastructure/ai/enrichment_parser.py).
 
 Env catalog: [environment.md](../reference/environment.md). Product shape: [architecture → AI design](../explanation/architecture.md#5-ai-design).
 
@@ -28,6 +28,8 @@ Scores are integers 0–100. The parser validates, clamps, and truncates the exp
 
 Missing keys raise `ConfigurationError` immediately. That error is **not** retried.
 
+The resilient adapter creates the primary provider on the first enrichment call, not at startup or dependency resolution. An unsupported `AI_PROVIDER` therefore fails inside enrichment: the API returns **502** `ENRICHMENT_FAILED`, and CLI commands still start.
+
 ## Prompt
 
 Version `clinic_enrichment_v1`, file `backend/app/infrastructure/ai/prompts/clinic_enrichment_v1.txt`. Each stored enrichment records `prompt_version`.
@@ -40,7 +42,7 @@ If the first completion is not valid JSON for the schema, the provider sends one
 
 ## Retries
 
-`analyze_clinic_with_retries` retries **transient** failures (`TransientLLMError`: timeouts, 408/429/5xx, network, empty Gemini candidates). It does not retry missing keys or other configuration errors.
+`ResilientLLMProvider` retries **transient** failures (`TransientLLMError`: timeouts, 408/429/5xx, network, empty Gemini candidates). It does not retry missing keys or other configuration errors.
 
 - Attempts: `AI_RETRY_MAX` (default 3)
 - Backoff: `2 ** attempt` seconds between tries
@@ -48,7 +50,7 @@ If the first completion is not valid JSON for the schema, the provider sends one
 
 ## Fallback
 
-If the primary provider still fails and `AI_FALLBACK_PROVIDER` is set to a **different** name, the factory builds that provider and runs the same retry loop. Empty or identical fallback is ignored; the original error is raised.
+If the primary provider still fails and `AI_FALLBACK_PROVIDER` is set to a **different** name, the resilient adapter runs the same retry loop against that provider. Empty or identical fallback is ignored; the original error is raised. Completion metadata records the provider and model that actually returned the result.
 
 The HTTP API maps a final failure to **502** `ENRICHMENT_FAILED` without leaking upstream response bodies to the client.
 

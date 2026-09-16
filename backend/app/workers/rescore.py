@@ -37,7 +37,10 @@ def _run_job() -> bool:
                 configs,
             )
             config = configs.get_config(job.config_version)
-            results = RescoreAll(clinics, compute).execute(commit_each=False, config=config)
+            results = RescoreAll(clinics, compute, configs).execute(
+                commit_each=False,
+                config=config,
+            )
             session.commit()
             jobs.succeed(job.id, len(results))
             logger.info(

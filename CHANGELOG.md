@@ -19,13 +19,24 @@ Human-readable history of Dental Radar. Commit messages are not a substitute for
 - Frontend toolchain moved to Next.js 16 (React 19) and Tailwind CSS v4. Conventions changed with the Next major — see `frontend/AGENTS.md`.
 - CI frontend job runs `next build` in addition to lint and Vitest.
 - Backend `ruff` pinned to 0.16.3; the pre-commit hook now pins the same version so local formatting matches the CI gate.
+- Crawling and enrichment now follow the documented inward dependency direction: domain page evidence, application crawler errors/input fingerprints, and an injected resilient LLM adapter.
+- The active `scoring_config` database row is the sole runtime scoring source; migration `0001` remains the immutable bootstrap definition.
+- ORM metadata now declares the active-scoring-config uniqueness index and rescore-job status constraint already created by migrations `0001` and `0005`; this changes no database schema.
 
 ### Fixed
 
 - Preserve endpoint-specific backend validation messages instead of rewriting scoring errors as clinic-filter guidance.
 - Drive score-ranked pagination from the score index and add indexed clinic-name ordering.
+- Persist `score --all` results per clinic while keeping durable worker rescoring atomic.
+- Reject empty API scoring-band configuration in the dashboard instead of substituting hard-coded bands.
+- An unsupported `AI_PROVIDER` returns 502 `ENRICHMENT_FAILED` from the enrich route instead of failing during request wiring.
 - Run Alembic once through a migration service before API/worker startup rather than in every API replica.
-- Documentation accuracy pass: `/health/ready` documented as returning 503 `degraded` (it checks Postgres **and** Redis, and never 500s on their failure), removed a `mypy`-in-CI claim that no workflow runs, corrected the `next lint` command, refreshed test counts, added the BFF proxy to the architecture diagram and folder trees, documented the frontend proxy's own error codes in the API reference, and left `scoring_defaults.yaml` plus [tune scoring](docs/how-to/tune-scoring.md) as the only copies of the default weights and bands.
+- Documentation accuracy pass: `/health/ready` documented as returning 503 `degraded` (it checks Postgres **and** Redis, and never 500s on their failure), removed a `mypy`-in-CI claim that no workflow runs, corrected the `next lint` command, refreshed test counts, added the BFF proxy to the architecture diagram and folder trees, documented the frontend proxy's own error codes, and clarified the database-backed scoring source of truth.
+
+### Removed
+
+- Unused `scoring_defaults.yaml` and the direct PyYAML dependency (PyYAML remains a transitive dependency of `uvicorn[standard]`).
+- Unused `SignalWeight` value object, `Address.formatted`, `infrastructure/db/session.get_db`, and crawler `meta` extraction.
 
 ### Security
 

@@ -2,17 +2,23 @@
 
 > Per-sprint proof that acceptance criteria pass. Link to CI runs / paste key output. Strategy: [standards/testing.md](../standards/testing.md).
 
-## Current summary (2026-08-18)
+## Current summary (2026-09-16)
 
 | Suite | Command | Result |
 |-------|---------|--------|
-| Backend | `cd backend && DATABASE_URL=postgresql://dental_radar:dental_radar@localhost:5433/dental_radar_test uv run --locked pytest -q` | **90 passed** |
-| Frontend | `cd frontend && npm test` | **22 passed** |
+| Backend | `cd backend && DATABASE_URL=postgresql://dental_radar:dental_radar@localhost:5433/dental_radar_test uv run --locked pytest -q` | **109 passed** |
+| Frontend | `cd frontend && npm test` | **23 passed** |
 | Lint / build | `uv run ruff check .` + `uv run ruff format --check .`; `npm run lint` + `npm run build` | clean |
-| Supply chain | gitleaks; locked `pip-audit`; `npm audit --audit-level=high` | no findings |
-| Runtime | Alembic downgrade/upgrade; production frontend headers; browser render/overlay check | pass |
+| Supply chain | locked `pip-audit`; `npm audit --audit-level=high` | backend: no findings; frontend: no high/critical findings (2 moderate dev-tool findings remain) |
+| Runtime | `alembic check`; migration-backed test setup; production frontend build | pass |
 
-> Includes durable rescore enqueue/status and null-score ordering regressions, scoring validation/error preservation, sortable-header accessibility, security-header configuration, Redis fail-closed/shared-rate-limit coverage, and frontend BFF credential-boundary tests. Historical snapshots are retained below.
+> Includes persisted CLI batch scores, atomic worker rescoring, resilient provider retry/fallback, static layer-boundary enforcement, scored/unscored pagination boundaries, API-only frontend bands, plus the prior durable-job, security, and BFF regressions. Historical snapshots are retained below.
+
+### Balanced architecture remediation — 2026-09-16
+
+- Story: CLI transaction ownership, dependency direction, dead-artifact cleanup, pagination guardrails — PASS
+- Evidence: 109 backend tests; 23 frontend tests; Ruff, Alembic metadata check, ESLint, Vitest, and Next production build pass; backend and frontend high/critical dependency audits pass.
+- Coverage: CLI scores survive session close; CLI requests per-clinic commits; worker requests caller-owned transaction and rolls back failures; retry exhaustion/fallback/metadata; crawl failure and safe 502 mapping; forbidden imports; ascending/descending filtered partition boundaries; empty API band configuration cannot be saved.
 
 ### QA remediation — 2026-08-18
 

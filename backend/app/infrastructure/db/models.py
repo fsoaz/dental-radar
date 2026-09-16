@@ -3,6 +3,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
@@ -10,6 +11,7 @@ from sqlalchemy import (
     Numeric,
     Text,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -104,8 +106,22 @@ class ScoringConfigModel(Base):
     )
 
 
+Index(
+    "uq_scoring_config_active",
+    ScoringConfigModel.active,
+    unique=True,
+    postgresql_where=text("active"),
+)
+
+
 class RescoreJobModel(Base):
     __tablename__ = "rescore_job"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('queued', 'running', 'succeeded', 'failed')",
+            name="ck_rescore_job_status",
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     config_version: Mapped[int] = mapped_column(

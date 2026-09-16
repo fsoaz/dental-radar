@@ -118,4 +118,17 @@ describe("ScoringSettingsClient", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(/overlap/i);
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   });
+
+  it("rejects an empty band list returned by the API", async () => {
+    fetchScoringConfig.mockResolvedValue({ ...sampleConfig, bands: [] });
+    const user = userEvent.setup();
+
+    render(<ScoringSettingsClient />);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/no priority bands/i);
+    const save = screen.getByRole("button", { name: "Save" });
+    expect(save).toBeDisabled();
+    await user.click(save);
+    expect(updateScoringConfig).not.toHaveBeenCalled();
+  });
 });

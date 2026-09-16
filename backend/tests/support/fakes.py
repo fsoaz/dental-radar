@@ -1,8 +1,9 @@
 from app.application.dto.clinic_dto import ClinicData
 from app.application.dto.enrichment_dto import ClinicAIInput, EnrichmentResult, LLMCompletion
-from app.application.dto.page_evidence import PageEvidence
+from app.application.ports.website_crawler import WebsiteFetchError
 from app.domain.value_objects.address import Address
-from app.infrastructure.crawler.website_crawler import WebsiteFetchError, parse_page_evidence
+from app.domain.value_objects.page_evidence import PageEvidence
+from app.infrastructure.crawler.website_crawler import parse_page_evidence
 
 
 class FakeClinicSource:

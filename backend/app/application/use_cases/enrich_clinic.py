@@ -3,16 +3,13 @@ from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from app.application.dto.enrichment_dto import ClinicAIInput, SignalSummary
+from app.application.enrichment_input import compute_input_fingerprint
 from app.application.ports.llm_provider import LLMProvider
-from app.application.ports.website_crawler import WebsiteCrawler
+from app.application.ports.website_crawler import WebsiteCrawler, WebsiteFetchError
 from app.domain.entities.enrichment import Enrichment
 from app.domain.exceptions import ClinicNotFoundError, EnrichmentFailedError
 from app.domain.repositories.clinic_repo import ClinicRepository
 from app.domain.repositories.enrichment_repo import EnrichmentRepository
-from app.infrastructure.ai.enrichment_parser import compute_input_fingerprint
-from app.infrastructure.ai.factory import analyze_clinic_resilient
-from app.infrastructure.config.settings import Settings, settings
-from app.infrastructure.crawler.website_crawler import WebsiteFetchError
 
 
 @dataclass
@@ -36,14 +33,14 @@ class EnrichClinic:
         clinic_repo: ClinicRepository,
         enrichment_repo: EnrichmentRepository,
         crawler: WebsiteCrawler,
-        llm_provider: LLMProvider | None = None,
-        app_settings: Settings | None = None,
+        llm_provider: LLMProvider,
+        max_site_text_chars: int,
     ) -> None:
         self._clinic_repo = clinic_repo
         self._enrichment_repo = enrichment_repo
         self._crawler = crawler
         self._llm_provider = llm_provider
-        self._settings = app_settings or settings
+        self._max_site_text_chars = max_site_text_chars
 
     def execute(self, clinic_id: UUID, *, force: bool = False) -> EnrichClinicResult:
         detail = self._clinic_repo.get_detail(clinic_id)
@@ -51,17 +48,14 @@ class EnrichClinic:
             raise ClinicNotFoundError(str(clinic_id))
 
         payload = self._build_payload(detail)
-        fingerprint = compute_input_fingerprint(payload, self._settings.ai_max_site_text_chars)
+        fingerprint = compute_input_fingerprint(payload, self._max_site_text_chars)
 
         existing = self._enrichment_repo.get_by_clinic(clinic_id)
         if existing is not None and not force and existing.input_fingerprint == fingerprint:
             return self._to_result(existing, skipped=True, skip_reason="Inputs unchanged")
 
         try:
-            if self._llm_provider is not None:
-                completion = self._llm_provider.analyze_clinic(payload)
-            else:
-                completion = analyze_clinic_resilient(payload, app_settings=self._settings)
+            completion = self._llm_provider.analyze_clinic(payload)
         except Exception as exc:
             raise EnrichmentFailedError(str(clinic_id), str(exc)) from exc
 

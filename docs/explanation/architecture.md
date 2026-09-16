@@ -123,8 +123,8 @@ classDiagram
 
 ### Value Objects (immutable, no identity)
 - `Address` — street, city, state, postal_code, country, lat, lng.
+- `PageEvidence` — crawled page URL, HTML, normalized text, scripts, and links consumed by domain signal rules.
 - `SignalType` — enum: `HIRING`, `ADVERTISING`, `WEBSITE_QUALITY`, `MULTI_LOCATION`, `HIGH_TICKET`.
-- `SignalWeight` — int weight with validation (≥0).
 - `ScoreBreakdown` — map of `SignalType → contributed points`, sums to `total`.
 - `PriorityLevel` — enum: `COLD`, `WARM`, `HOT`, `IMMEDIATE`, derived from total + band config.
 
@@ -135,8 +135,8 @@ classDiagram
 ### Ports (interfaces)
 - `ClinicRepository`, `SignalRepository`, `ScoreRepository`, `EnrichmentRepository` (Domain).
 - `ClinicSource.search(query) -> list[ClinicData]` (Application) — Google Places impl in infra.
-- `WebsiteCrawler.fetch(url) -> PageEvidence` (Application).
-- `LLMProvider.analyze_clinic(payload) -> EnrichmentResult` (Application).
+- `WebsiteCrawler.fetch(url) -> PageEvidence` (Application); `WebsiteFetchError` is part of this port contract, while adapter-specific unsafe-URL errors remain in infrastructure.
+- `LLMProvider.analyze_clinic(payload) -> LLMCompletion` (Application).
 
 ---
 
@@ -153,9 +153,9 @@ classDiagram
 }
 ```
 
-Bands must start at `0`, be contiguous, and leave the last one unbounded (`max: null`). Seed values live in `infrastructure/config/scoring_defaults.yaml` and are the source of truth for defaults; they are reproduced for operators in [tune scoring](../how-to/tune-scoring.md#prerequisites).
+Bands must start at `0`, be contiguous, and leave the last one unbounded (`max: null`). Migration `0001` contains the immutable bootstrap values for a new database. After bootstrap, the active `scoring_config` row is the runtime source of truth; [tune scoring](../how-to/tune-scoring.md#prerequisites) is the operator-facing reference.
 
-`ScoringService.compute(signals, config)` → `Score`. Editing the active config via API (`PUT /api/v1/scoring-config`) and requesting `rescore=true` atomically creates a durable job. The worker processes jobs in version order and updates every score in one transaction — **no redeploy, no code change**. Optionally a YAML default seed (`infrastructure/config/scoring_defaults.yaml`) bootstraps the first row.
+`ScoringService.compute(signals, config)` → `Score`. Editing the active config via API (`PUT /api/v1/scoring-config`) and requesting `rescore=true` atomically creates a durable job. The worker processes jobs in version order and updates every score in one transaction — **no redeploy, no code change**. CLI `score --all` instead commits each clinic as it completes so successful work survives a later clinic failure.
 
 ---
 
@@ -349,19 +349,20 @@ CREATE TABLE enrichment (
 ### 5.1 Provider abstraction
 ```python
 class LLMProvider(Protocol):
-    def analyze_clinic(self, payload: ClinicAIInput) -> EnrichmentResult: ...
+    def analyze_clinic(self, payload: ClinicAIInput) -> LLMCompletion: ...
 ```
-Implementations: `GPTProvider` (default), `ClaudeProvider`, `GeminiProvider`. A factory reads `AI_PROVIDER` env (`gpt|claude|gemini`) and returns the impl. All return the **same** `EnrichmentResult` schema, so use cases are provider-agnostic.
+Implementations: `GPTProvider` (default), `ClaudeProvider`, `GeminiProvider`. Infrastructure builds a `ResilientLLMProvider` from `AI_PROVIDER`, retry, and fallback settings, then injects it into `EnrichClinic`. All providers return the **same** `EnrichmentResult` schema, so the use case remains provider-agnostic.
 
 `GPTProvider` accepts an `OPENAI_BASE_URL` (default `https://api.openai.com/v1`) so it can target any OpenAI-compatible endpoint (e.g. OpenRouter). Settings normalize trailing slashes, reject plaintext `http://` at config load, and preserve the documented blank-value fallback to the OpenAI default. Provider constructors stay infallible so fallback providers are not masked by configuration validation.
 
 ```mermaid
 flowchart TB
-  UC[EnrichClinic use case] --> F{provider factory<br/>AI_PROVIDER}
+  UC[EnrichClinic use case] --> R[Injected ResilientLLMProvider<br/>retry + optional fallback]
+  R --> F{provider factory<br/>AI_PROVIDER}
   F --> G[GPTProvider]
   F --> C[ClaudeProvider]
   F --> M[GeminiProvider]
-  G & C & M --> R[EnrichmentResult<br/>4 scores + explanation]
+  G & C & M --> OUT[LLMCompletion<br/>actual provider/model + result]
 ```
 
 ### 5.2 Output schema (structured / JSON mode)
@@ -494,10 +495,11 @@ backend/
 ├── app/
 │   ├── domain/
 │   │   ├── entities/        clinic, location, signal, score, enrichment, scoring config, rescore job
-│   │   ├── value_objects/   address.py signal_type.py priority.py score_breakdown.py
+│   │   ├── value_objects/   address.py page_evidence.py signal_type.py priority.py score_breakdown.py
 │   │   ├── services/        scoring_service.py signal_detection_service.py
 │   │   └── repositories/    ports (interfaces): clinic_repo.py signal_repo.py ...
 │   ├── application/
+│   │   ├── enrichment_input.py  site-text normalization + input fingerprint
 │   │   ├── use_cases/       discover_clinics.py detect_signals.py compute_score.py enrich_clinic.py list_clinics.py
 │   │   ├── dto/             clinic_dto.py enrichment_dto.py
 │   │   └── ports/           clinic_source.py website_crawler.py llm_provider.py
@@ -506,8 +508,8 @@ backend/
 │   │   ├── repositories/    sqlalchemy_*_repo.py
 │   │   ├── sources/         google_places.py
 │   │   ├── crawler/         website_crawler.py
-│   │   ├── ai/              factory.py enrichment_parser.py providers/base_provider.py prompts/
-│   │   ├── config/          settings.py scoring_defaults.yaml
+│   │   ├── ai/              factory.py resilient_provider.py enrichment_parser.py providers/ prompts/
+│   │   ├── config/          settings.py
 │   │   ├── logging_config.py
 │   │   └── migrations/      (alembic) env.py versions/
 │   ├── presentation/
@@ -586,7 +588,7 @@ All secrets via env (`.env.production` or orchestrator injection). Never committ
 - **SSRF guard:** the website crawler (`HttpxWebsiteCrawler`) only allows `http`/`https`, resolves the host and rejects private/loopback/link-local/reserved/multicast addresses (e.g. cloud metadata `169.254.169.254`, internal services), and follows redirects manually (max 5) re-validating every hop.
 - **Cost guard:** Google Places discovery is capped at `PLACES_MAX_PAGES` (default 3 → 60 results) to bound paid-API spend per query.
 - **Operator API key:** mutating/paid routes require `X-API-Key` matching `API_KEY`. The same-origin frontend BFF injects it from server-only runtime configuration. Empty key fails closed (`503`) unless `ALLOW_UNAUTHENTICATED=true` (local only).
-- **Rate limits:** Redis-backed per-IP limits shared across replicas on discover, detect (`/signals:detect`), enrich, and mutating `/scoring-config` requests. Redis failure returns `503`. `POST /clinics/{id}/score` is not limited. Trust `X-Forwarded-For` only via `RATE_LIMIT_TRUSTED_PROXIES` (default: none). Keep it in sync with `FORWARDED_ALLOW_IPS`; the reverse proxy must overwrite XFF. See [deploy.md](../how-to/deploy.md).
+- **Rate limits:** Redis-backed per-IP limits shared across replicas on discover, detect (`/signals:detect`), enrich, and mutating `/scoring-config` requests. Redis failure returns `503`. `POST /clinics/{id}/score` is not limited. Trust `X-Forwarded-For` only via `RATE_LIMIT_TRUSTED_PROXIES` (default: none). Keep it in sync with `FORWARDED_ALLOW_IPS`; the reverse proxy must overwrite XFF. In the current browser → Next.js BFF → API topology, browser writes appear to the API as a shared BFF-side bucket unless the deployment adds a trusted proxy chain that supplies distinct client addresses. See [deploy.md](../how-to/deploy.md).
 - **OpenAPI:** `/docs` and `/openapi.json` disabled when `APP_ENV=production`.
 - **Network:** production binds the API to `127.0.0.1` by default; local Compose binds every published service to loopback. The frontend remains an operator-only surface and is the authorization boundary for BFF writes.
 

@@ -3,8 +3,8 @@
 Stories: US-C1, US-C2. Sprint S3. Goal: typed signals with evidence attached to clinics.
 
 ## Tasks
-- [x] `WebsiteCrawler` port + `infrastructure/crawler/website_crawler.py` (fetch HTML, extract text, scripts, meta, links). Respect timeouts; handle missing site.
-- [x] `SignalType` VO enum + `SignalWeight`.
+- [x] `WebsiteCrawler` port + `infrastructure/crawler/website_crawler.py` (fetch HTML, extract text, scripts, links). *(`meta` extraction was removed in 2026-09 because no detector used it.)* Respect timeouts; handle missing site.
+- [x] `SignalType` VO enum. *(The unused `SignalWeight` VO was removed in 2026-09; weights are validated at the scoring-config API boundary.)*
 - [x] `SignalDetectionService` (pure rules), one detector per type:
   - [x] **Hiring** — careers/jobs page or keywords (implantologist, orthodontist, receptionist, sales coordinator).
   - [x] **Advertising** — Meta Pixel (`fbq`), Google Ads/gtag, conversion tags, landing-page patterns.

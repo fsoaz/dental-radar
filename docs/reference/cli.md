@@ -43,6 +43,7 @@ uv run dental-radar score --all
 ```
 
 Uses the active scoring config. Per-clinic output includes total, priority band, and config version.
+With `--all`, each clinic is committed as it completes. If a later clinic fails, scores already written by that batch remain persisted.
 
 ### `enrich`
 

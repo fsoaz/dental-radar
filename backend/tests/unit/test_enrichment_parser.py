@@ -2,11 +2,10 @@ import httpx
 import pytest
 
 from app.application.dto.enrichment_dto import ClinicAIInput, EnrichmentResult, SignalSummary
+from app.application.enrichment_input import compute_input_fingerprint, normalize_site_text
 from app.infrastructure.ai.enrichment_parser import (
     EnrichmentParseError,
-    compute_input_fingerprint,
     parse_enrichment_response,
-    truncate_site_text,
 )
 from app.infrastructure.ai.providers.base_provider import GPTProvider, TransientLLMError
 from app.infrastructure.config.settings import DEFAULT_OPENAI_BASE_URL
@@ -168,9 +167,9 @@ def test_compute_input_fingerprint_changes_when_signals_change():
     assert compute_input_fingerprint(base, 8000) != compute_input_fingerprint(changed, 8000)
 
 
-def test_truncate_site_text_respects_limit():
+def test_normalize_site_text_respects_limit():
     text = "word " * 1000
-    truncated = truncate_site_text(text, 50)
+    truncated = normalize_site_text(text, 50)
     assert len(truncated) <= 51
     assert truncated.endswith("…")
 

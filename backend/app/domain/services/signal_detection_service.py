@@ -1,7 +1,7 @@
 import re
 from dataclasses import dataclass
 
-from app.application.dto.page_evidence import PageEvidence
+from app.domain.value_objects.page_evidence import PageEvidence
 from app.domain.value_objects.signal_type import SignalType
 
 

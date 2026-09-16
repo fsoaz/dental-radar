@@ -4,6 +4,7 @@ from secrets import compare_digest
 from fastapi import Depends, Header
 from sqlalchemy.orm import Session
 
+from app.application.ports.llm_provider import LLMProvider
 from app.application.use_cases.compute_score import (
     ComputeScore,
     GetRescoreJob,
@@ -17,6 +18,7 @@ from app.application.use_cases.discover_clinics import DiscoverClinics
 from app.application.use_cases.enrich_clinic import EnrichAllClinics, EnrichClinic
 from app.application.use_cases.list_clinics import GetClinic, ListClinics
 from app.domain.exceptions import ApiKeyNotConfiguredError, UnauthorizedError
+from app.infrastructure.ai.resilient_provider import ResilientLLMProvider
 from app.infrastructure.config.settings import settings
 from app.infrastructure.crawler.website_crawler import HttpxWebsiteCrawler
 from app.infrastructure.db.session import SessionLocal
@@ -159,8 +161,9 @@ def get_compute_score(
 def get_rescore_all(
     clinic_repo: SqlAlchemyClinicRepository = Depends(get_clinic_repository),
     compute_score: ComputeScore = Depends(get_compute_score),
+    scoring_config_repo: SqlAlchemyScoringConfigRepository = Depends(get_scoring_config_repository),
 ) -> RescoreAll:
-    return RescoreAll(clinic_repo, compute_score)
+    return RescoreAll(clinic_repo, compute_score, scoring_config_repo)
 
 
 def get_get_scoring_config(
@@ -190,12 +193,23 @@ def get_detect_all_signals(
     return DetectAllSignals(clinic_repo, detect_signals)
 
 
+def get_llm_provider() -> LLMProvider:
+    return ResilientLLMProvider(app_settings=settings)
+
+
 def get_enrich_clinic(
     clinic_repo: SqlAlchemyClinicRepository = Depends(get_clinic_repository),
     enrichment_repo: SqlAlchemyEnrichmentRepository = Depends(get_enrichment_repository),
     crawler: HttpxWebsiteCrawler = Depends(get_website_crawler),
+    llm_provider: LLMProvider = Depends(get_llm_provider),
 ) -> EnrichClinic:
-    return EnrichClinic(clinic_repo, enrichment_repo, crawler)
+    return EnrichClinic(
+        clinic_repo,
+        enrichment_repo,
+        crawler,
+        llm_provider,
+        settings.ai_max_site_text_chars,
+    )
 
 
 def get_enrich_all_clinics(

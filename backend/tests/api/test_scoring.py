@@ -160,6 +160,62 @@ def test_score_sort_preserves_unscored_null_placement(scoring_stack):
     assert ascending.items[-1].clinic.id == scored.id
 
 
+@pytest.mark.parametrize("sort", ["-score", "score"])
+def test_score_pagination_crosses_scored_boundary_without_duplicates(scoring_stack, sort):
+    clinic_repo, *_rest, compute = scoring_stack
+    matching_ids = set()
+
+    for index in range(6):
+        data = make_clinic_data(
+            place_id=f"boundary-{sort}-{index}",
+            name=f"Boundary Clinic {index}",
+            city="Lisboa",
+            state="Lisboa",
+        )
+        DiscoverClinics(FakeClinicSource([data]), clinic_repo).execute("dentist")
+        clinic = (
+            clinic_repo.list_clinics(ClinicListQuery(q=f"Boundary Clinic {index}")).items[0].clinic
+        )
+        matching_ids.add(clinic.id)
+        if index < 4:
+            compute.execute(clinic.id)
+
+    DiscoverClinics(
+        FakeClinicSource(
+            [
+                make_clinic_data(
+                    place_id=f"boundary-{sort}-filtered-out",
+                    name="Filtered Out Clinic",
+                    city="Porto",
+                    state="Porto",
+                )
+            ]
+        ),
+        clinic_repo,
+    ).execute("dentist")
+
+    query = {
+        "state": "Lisboa",
+        "has_website": True,
+        "sort": sort,
+        "page_size": 3,
+    }
+    page_one = clinic_repo.list_clinics(ClinicListQuery(page=1, **query))
+    page_two = clinic_repo.list_clinics(ClinicListQuery(page=2, **query))
+    combined = page_one.items + page_two.items
+
+    assert page_one.total == page_two.total == 6
+    assert len(combined) == 6
+    assert {item.clinic.id for item in combined} == matching_ids
+    assert len({item.clinic.id for item in combined}) == len(combined)
+    if sort == "-score":
+        assert all(item.score is not None for item in page_one.items)
+        assert sum(item.score is None for item in page_two.items) == 2
+    else:
+        assert sum(item.score is None for item in page_one.items) == 2
+        assert all(item.score is not None for item in page_two.items)
+
+
 def test_unknown_rescore_job_returns_404(client):
     response = client.get(f"/api/v1/scoring-config/rescore-jobs/{uuid4()}")
     assert response.status_code == 404
@@ -174,7 +230,7 @@ def test_update_scoring_config_rescores(client, db_session, scoring_stack):
     from app.main import create_app
     from app.presentation.api.deps import get_db_session, get_update_scoring_config
 
-    rescore_all = RescoreAll(clinic_repo, compute)
+    rescore_all = RescoreAll(clinic_repo, compute, scoring_repo)
     jobs = SqlAlchemyRescoreJobRepository(db_session)
     update = UpdateScoringConfig(scoring_repo, jobs)
 

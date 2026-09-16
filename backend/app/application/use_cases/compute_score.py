@@ -88,23 +88,25 @@ class RescoreAll:
         self,
         clinic_repo: ClinicRepository,
         compute_score: ComputeScore,
+        scoring_config_repo: ScoringConfigRepository,
     ) -> None:
         self._clinic_repo = clinic_repo
         self._compute_score = compute_score
+        self._scoring_config_repo = scoring_config_repo
 
     def execute(
         self,
         *,
-        commit_each: bool = False,
+        commit_each: bool,
         config: ScoringConfig | None = None,
     ) -> list[ComputeScoreResult]:
         """Rescore every clinic.
 
-        When ``commit_each`` is False (default for config updates), scores are
+        When ``commit_each`` is False (used by the rescore worker), scores are
         flushed in one transaction and committed by the caller — avoiding N
         round-trips and partial multi-version state on failure.
         """
-        config = config or self._compute_score._scoring_config_repo.get_active_config()
+        config = config or self._scoring_config_repo.get_active_config()
         results: list[ComputeScoreResult] = []
         for clinic_id in self._clinic_repo.list_all_ids():
             results.append(

@@ -2,14 +2,13 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-from app.application.ports.website_crawler import WebsiteCrawler
+from app.application.ports.website_crawler import WebsiteCrawler, WebsiteFetchError
 from app.domain.entities.signal import Signal
 from app.domain.exceptions import ClinicNotFoundError
 from app.domain.repositories.clinic_repo import ClinicRepository
 from app.domain.repositories.scoring_config_repo import ScoringConfigRepository
 from app.domain.repositories.signal_repo import SignalRepository
 from app.domain.services.signal_detection_service import SignalDetectionService
-from app.infrastructure.crawler.website_crawler import WebsiteFetchError
 
 
 @dataclass

@@ -9,7 +9,7 @@ Concepts: [glossary](../reference/glossary.md) · engine: [architecture → scor
 - Stack is up. See [getting started](../tutorials/getting-started.md).
 - The dashboard is reachable only through the trusted operator network boundary.
 
-Default weights and bands (seeded `scoring_config` v1):
+Default weights and bands (seeded into `scoring_config` v1 by bootstrap migration `0001`):
 
 | Signal | Default weight |
 |--------|---------------:|
@@ -25,6 +25,8 @@ Default weights and bands (seeded `scoring_config` v1):
 | `WARM` | 51–100 |
 | `HOT` | 101–150 |
 | `IMMEDIATE` | 151+ |
+
+The active database row is the runtime source of truth. The migration values above only bootstrap a new database; subsequent versions are created through the dashboard or API.
 
 ## Option A — dashboard
 

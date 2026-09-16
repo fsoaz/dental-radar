@@ -21,13 +21,6 @@ const SIGNAL_KEYS = [
   "HIGH_TICKET",
 ] as const;
 
-const DEFAULT_BANDS: ScoreBand[] = [
-  { name: "COLD", min: 0, max: 50 },
-  { name: "WARM", min: 51, max: 100 },
-  { name: "HOT", min: 101, max: 150 },
-  { name: "IMMEDIATE", min: 151, max: null },
-];
-
 function validateSettings(weights: Record<string, number>, bands: ScoreBand[]): string[] {
   const errors: string[] = [];
   for (const key of SIGNAL_KEYS) {
@@ -36,7 +29,11 @@ function validateSettings(weights: Record<string, number>, bands: ScoreBand[]): 
       errors.push(`${key.replaceAll("_", " ")} must be a whole number from 0 to 1000.`);
     }
   }
-  if (bands[0]?.min !== 0) errors.push("The first band must start at 0.");
+  if (bands.length === 0) {
+    errors.push("The API returned no priority bands. Add bands through a valid scoring config.");
+    return errors;
+  }
+  if (bands[0].min !== 0) errors.push("The first band must start at 0.");
   bands.forEach((band, index) => {
     if (!Number.isInteger(band.min) || band.min < 0) {
       errors.push(`${band.name} minimum must be a non-negative whole number.`);
@@ -62,7 +59,7 @@ function validateSettings(weights: Record<string, number>, bands: ScoreBand[]): 
 
 export function ScoringSettingsClient() {
   const [weights, setWeights] = useState<Record<string, number>>({});
-  const [bands, setBands] = useState<ScoreBand[]>(DEFAULT_BANDS);
+  const [bands, setBands] = useState<ScoreBand[]>([]);
   const [version, setVersion] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -126,11 +123,7 @@ export function ScoringSettingsClient() {
   function applyConfig(config: ScoringConfig) {
     setVersion(config.version);
     setWeights({ ...config.weights });
-    setBands(
-      config.bands.length
-        ? config.bands.map((band) => ({ ...band, name: band.name as PriorityLevel }))
-        : DEFAULT_BANDS,
-    );
+    setBands(config.bands.map((band) => ({ ...band, name: band.name as PriorityLevel })));
   }
 
   async function save(rescore: boolean) {
@@ -173,7 +166,8 @@ export function ScoringSettingsClient() {
 
   const validationErrors = version == null ? [] : validateSettings(weights, bands);
   const jobRunning = activeJob && ["queued", "running"].includes(activeJob.status);
-  const actionsDisabled = saving || validationErrors.length > 0 || Boolean(jobRunning);
+  const actionsDisabled =
+    version == null || saving || validationErrors.length > 0 || Boolean(jobRunning);
 
   return (
     <div className="space-y-6">

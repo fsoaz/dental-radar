@@ -6,17 +6,11 @@ from urllib.parse import urljoin, urlparse, urlunparse
 
 import httpx
 
-from app.application.dto.page_evidence import PageEvidence
-from app.application.ports.website_crawler import WebsiteCrawler
+from app.application.ports.website_crawler import WebsiteCrawler, WebsiteFetchError
+from app.domain.value_objects.page_evidence import PageEvidence
 
 ALLOWED_SCHEMES = frozenset({"http", "https"})
 MAX_REDIRECTS = 5
-
-
-class WebsiteFetchError(Exception):
-    def __init__(self, url: str, message: str) -> None:
-        self.url = url
-        super().__init__(f"Failed to fetch {url}: {message}")
 
 
 class UnsafeUrlError(WebsiteFetchError):
@@ -85,7 +79,6 @@ class _LinkTextParser(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
         self.links: list[str] = []
-        self.meta: dict[str, str] = {}
         self.scripts: list[str] = []
         self._capture_script = False
         self._script_chunks: list[str] = []
@@ -94,11 +87,6 @@ class _LinkTextParser(HTMLParser):
         attr_map = {key: value or "" for key, value in attrs}
         if tag == "a" and "href" in attr_map:
             self.links.append(attr_map["href"])
-        if tag == "meta":
-            name = attr_map.get("name") or attr_map.get("property") or ""
-            content = attr_map.get("content") or ""
-            if name:
-                self.meta[name.lower()] = content
         if tag == "script":
             self._capture_script = True
             self._script_chunks = []
@@ -132,7 +120,6 @@ def parse_page_evidence(url: str, html: str) -> PageEvidence:
         html=html,
         text=text,
         scripts=parser.scripts,
-        meta=parser.meta,
         links=absolute_links,
     )
 
