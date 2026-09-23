@@ -50,4 +50,4 @@ Layered, matching Clean Architecture:
 | `ci.yml` | PR + push to `main` | gitleaks; backend locked install + ruff + alembic upgrade + pytest + pip-audit; frontend `npm ci` + eslint + vitest + `next build` + high/critical audit gate |
 | `deploy.yml` | push to `main` | same security/test gate → build/push GHCR images → smoke deploy + rollback |
 
-Dependabot monitors both package ecosystems. Green CI is required to merge, and deploy images are not published unless the gate passes. Test evidence is summarized in [test_evidence.md](../internal/test_evidence.md) per sprint.
+Dependabot monitors both package ecosystems and GitHub Actions weekly; the backend uses its `uv` ecosystem so `uv.lock` is updated with `pyproject.toml`, and ESLint and TypeScript major bumps are ignored until `eslint-config-next` supports ESLint 10 and TypeScript 7. Green CI is required to merge, and deploy images are not published unless the gate passes. Test evidence is summarized in [test_evidence.md](../internal/test_evidence.md) per sprint.

@@ -1,6 +1,7 @@
 version: 2
 updates:
-  - package-ecosystem: pip
+  # uv (not pip) so Dependabot regenerates backend/uv.lock alongside pyproject.toml.
+  - package-ecosystem: uv
     directory: /backend
     schedule:
       interval: weekly
@@ -15,6 +16,13 @@ updates:
     groups:
       frontend-dependencies:
         patterns: ["*"]
+    # eslint-config-next bundles typescript-eslint (TS <6.1) and eslint-plugin-react
+    # (ESLint ^9.7); drop these once both support TypeScript 7 and ESLint 10.
+    ignore:
+      - dependency-name: eslint
+        update-types: ["version-update:semver-major"]
+      - dependency-name: typescript
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: /

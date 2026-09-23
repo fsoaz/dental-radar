@@ -579,7 +579,7 @@ The worker polls the Postgres `rescore_job` table. A session-level advisory lock
 ### CI/CD
 - **ci.yml:** gitleaks plus locked backend/frontend installs, lint, tests, `pip-audit`, and `npm audit --audit-level=high` on PR/push
 - **deploy.yml:** on `main` → same security/test gate → build/push GHCR images → smoke deploy + rollback script
-- **Dependency updates:** Dependabot watches Python and npm manifests; `uv.lock` and `package-lock.json` make audit and image inputs reproducible.
+- **Dependency updates:** Dependabot watches the uv-managed Python project (manifest and lockfile), npm manifests, and GitHub Actions; `uv.lock` and `package-lock.json` make audit and image inputs reproducible.
 
 ### Secrets
 All secrets via env (`.env.production` or orchestrator injection). Never committed. See `.env.production.example`. LLM provider keys are sent in request **headers** only (no API keys in URLs/query strings) so they don't leak into proxy/LB access logs.
